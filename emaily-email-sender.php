@@ -224,51 +224,51 @@ add_action('add_meta_boxes', 'emaily_add_status_metabox');
 
 // Render status metabox
 function emaily_campaign_status_metabox($post) {
-    $queue = get_post_meta($post->ID, 'emaily_campaign_email_queue', true);
-    $sent_emails = get_post_meta($post->ID, 'emaily_campaign_sent_emails', true);
-    $failed_emails = get_post_meta($post->ID, 'emaily_campaign_failed_emails', true);
-    $opened_emails = get_post_meta($post->ID, 'emaily_campaign_opened_emails', true);
-    $all_sent = get_post_meta($post->ID, 'emaily_campaign_all_emails_sent', true);
-    $start_time = get_post_meta($post->ID, 'emaily_campaign_start_time', true);
-    $status = get_post_meta($post->ID, 'emaily_campaign_status', true);
+	$queue = get_post_meta($post->ID, 'emaily_campaign_email_queue', true);
+	$sent_emails = get_post_meta($post->ID, 'emaily_campaign_sent_emails', true);
+	$failed_emails = get_post_meta($post->ID, 'emaily_campaign_failed_emails', true);
+	$opened_emails = get_post_meta($post->ID, 'emaily_campaign_opened_emails', true);
+	$all_sent = get_post_meta($post->ID, 'emaily_campaign_all_emails_sent', true);
+	$start_time = get_post_meta($post->ID, 'emaily_campaign_start_time', true);
+	$status = get_post_meta($post->ID, 'emaily_campaign_status', true);
 
-    $queued_count = is_array($queue) ? count($queue) : 0;
-    $sent_count = is_array($sent_emails) ? count($sent_emails) : 0;
-    $failed_count = is_array($failed_emails) ? count($failed_emails) : 0;
-    $opened_count = is_array($opened_emails) ? count($opened_emails) : 0;
-    $total_count = $queued_count + $sent_count + $failed_count;
+	$queued_count = is_array($queue) ? count($queue) : 0;
+	$sent_count = is_array($sent_emails) ? count($sent_emails) : 0;
+	$failed_count = is_array($failed_emails) ? count($failed_emails) : 0;
+	$opened_count = is_array($opened_emails) ? count($opened_emails) : 0;
+	$total_count = $queued_count + $sent_count + $failed_count;
 
-    $display_status = $status === 'paused' ? 'Paused' : ($all_sent ? 'Completed' : ($queued_count > 0 && $start_time && strtotime($start_time) <= current_time('timestamp') ? 'Sending' : ($queued_count > 0 ? 'Queued' : 'Not Started')));
+	$display_status = $status === 'paused' ? 'Paused' : ($all_sent ? 'Completed' : ($queued_count > 0 && $start_time && strtotime($start_time) <= current_time('timestamp') ? 'Sending' : ($queued_count > 0 ? 'Queued' : 'Not Started')));
 
-    $can_toggle = $start_time && strtotime($start_time) > current_time('timestamp') && in_array($status, array('queued', 'paused'));
+	$can_toggle = $start_time && strtotime($start_time) > current_time('timestamp') && in_array($status, array('queued', 'paused'));
 
-    ?>
-    <div id="emaily-campaign-status-metabox">
-        <p><strong><?php esc_html_e('Status:', 'emaily'); ?></strong> <?php echo esc_html($display_status); ?></p>
-        <p><strong><?php esc_html_e('Total Emails:', 'emaily'); ?></strong> <?php echo esc_html($total_count); ?></p>
-        <p><strong><?php esc_html_e('Sent Emails:', 'emaily'); ?></strong> <?php echo esc_html($sent_count); ?></p>
-        <p><strong><?php esc_html_e('Queued Emails:', 'emaily'); ?></strong> <?php echo esc_html($queued_count); ?></p>
-        <p><strong><?php esc_html_e('Failed Emails:', 'emaily'); ?></strong> <?php echo esc_html($failed_count); ?></p>
-        <p><strong><?php esc_html_e('Opened Emails:', 'emaily'); ?></strong> <?php echo esc_html($opened_count); ?></p>
-        <?php if ($start_time) : ?>
-            <p><strong><?php esc_html_e('Scheduled Start:', 'emaily'); ?></strong> <?php echo esc_html($start_time); ?></p>
-        <?php endif; ?>
-        <?php if ($can_toggle) : ?>
-            <p>
-                <?php if ($status === 'queued') : ?>
-                    <button type="button" class="button button-secondary" id="emaily-pause-campaign" data-post-id="<?php echo esc_attr($post->ID); ?>">
-                        <?php esc_html_e('Pause Campaign', 'emaily'); ?>
-                    </button>
-                <?php elseif ($status === 'paused') : ?>
-                    <button type="button" class="button button-primary" id="emaily-resume-campaign" data-post-id="<?php echo esc_attr($post->ID); ?>">
-                        <?php esc_html_e('Resume Campaign', 'emaily'); ?>
-                    </button>
-                <?php endif; ?>
-            </p>
-        <?php endif; ?>
-        <div id="emaily-status-message"></div>
-    </div>
-    <style>
+	?>
+	<div id="emaily-campaign-status-metabox">
+		<p><strong><?php esc_html_e('Status:', 'emaily'); ?></strong> <?php echo esc_html($display_status); ?></p>
+		<p><strong><?php esc_html_e('Total Emails:', 'emaily'); ?></strong> <?php echo esc_html($total_count); ?></p>
+		<p><strong><?php esc_html_e('Sent Emails:', 'emaily'); ?></strong> <?php echo esc_html($sent_count); ?></p>
+		<p><strong><?php esc_html_e('Queued Emails:', 'emaily'); ?></strong> <?php echo esc_html($queued_count); ?></p>
+		<p><strong><?php esc_html_e('Failed Emails:', 'emaily'); ?></strong> <?php echo esc_html($failed_count); ?></p>
+		<p><strong><?php esc_html_e('Opened Emails:', 'emaily'); ?></strong> <?php echo esc_html($opened_count); ?></p>
+		<?php if ($start_time) : ?>
+			<p><strong><?php esc_html_e('Scheduled Start:', 'emaily'); ?></strong> <?php echo esc_html($start_time); ?></p>
+		<?php endif; ?>
+		<?php if ($can_toggle) : ?>
+			<p>
+				<?php if ($status === 'queued') : ?>
+					<button type="button" class="button button-secondary" id="emaily-pause-campaign" data-post-id="<?php echo esc_attr($post->ID); ?>">
+						<?php esc_html_e('Pause Campaign', 'emaily'); ?>
+					</button>
+				<?php elseif ($status === 'paused') : ?>
+					<button type="button" class="button button-primary" id="emaily-resume-campaign" data-post-id="<?php echo esc_attr($post->ID); ?>">
+						<?php esc_html_e('Resume Campaign', 'emaily'); ?>
+					</button>
+				<?php endif; ?>
+			</p>
+		<?php endif; ?>
+		<div id="emaily-status-message"></div>
+	</div>
+	<style>
         #emaily-campaign-status-metabox {
             padding: 15px;
             background: #fff;
@@ -292,6 +292,7 @@ function emaily_campaign_status_metabox($post) {
             border: 1px solid #dc3232;
             background: #fff4f4;
         }
-    </style>
-    <?php
+	</style>
+	<?php
 }
+

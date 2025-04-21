@@ -1,1 +1,102 @@
 /* Admin styles for Emaily plugin */
+#emaily-form-builder {
+    padding: 20px;
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    margin-top: 20px;
+}
+
+.emaily-builder-fields {
+    min-height: 50px;
+    padding: 10px;
+    background: #fff;
+    border: 1px dashed #ccc;
+}
+
+.emaily-field-block {
+    display: flex;
+    align-items: center;
+    background: #fff;
+    border: 1px solid #ddd;
+    padding: 10px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.emaily-field-handle {
+    cursor: move;
+    margin-right: 10px;
+}
+
+.emaily-field-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: #374151;
+    margin-right: 10px;
+}
+
+.emaily-field-input {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    background: #f3f4f6;
+}
+
+.emaily-field-remove {
+    cursor: pointer;
+    color: #dc2626;
+    margin-left: 10px;
+}
+
+.emaily-field-remove:hover {
+    color: #b91c1c;
+}
+
+#emaily-form-fields-metabox label {
+    display: block;
+    margin: 8px 0;
+}
+
+#emaily-form-lists-metabox,
+#emaily-form-type-metabox {
+    padding: 10px;
+}
+
+.emaily-metabox-label {
+    font-weight: bold;
+    margin-bottom: 8px;
+    display: block;
+    color: #23282d;
+}
+
+#emaily_form_lists,
+#emaily_form_type {
+    width: 100%;
+    max-width: 100%;
+}
+
+.emaily-notice {
+    background: #fff3cd;
+    border-left: 4px solid #ffba00;
+    padding: 10px;
+    margin: 10px 0;
+    color: #856404;
+}
+
+.emaily-notice a {
+    color: #0073aa;
+    text-decoration: underline;
+}
+
+.emaily-notice a:hover {
+    color: #005177;
+}
+
+/* Styles for admin list table columns */
+.column-audience_count,
+.column-campaign_status,
+.column-open_rate {
+    width: 150px;
+}

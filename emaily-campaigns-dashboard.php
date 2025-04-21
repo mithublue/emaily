@@ -27,6 +27,7 @@ class Emaily_Campaigns_Table extends WP_List_Table {
 			'queued_emails'   => __('Queued Emails', 'emaily'),
 			'failed_emails'   => __('Failed Emails', 'emaily'),
 			'opened_emails'   => __('Opened Emails', 'emaily'),
+			'open_rate'       => __('Open Rate', 'emaily'),
 			'scheduled_start' => __('Scheduled Start', 'emaily'),
 		);
 	}
@@ -61,6 +62,12 @@ class Emaily_Campaigns_Table extends WP_List_Table {
 			case 'opened_emails':
 				$opened = get_post_meta($item->ID, 'emaily_campaign_opened_emails', true);
 				return esc_html(is_array($opened) ? count($opened) : 0);
+			case 'open_rate':
+				$sent = get_post_meta($item->ID, 'emaily_campaign_sent_emails', true);
+				$opened = get_post_meta($item->ID, 'emaily_campaign_opened_emails', true);
+				$sent_count = is_array($sent) ? count($sent) : 0;
+				$opened_count = is_array($opened) ? count($opened) : 0;
+				return $sent_count > 0 ? esc_html(number_format(($opened_count / $sent_count) * 100, 2) . '%') : '0.00%';
 			case 'scheduled_start':
 				$start_time = get_post_meta($item->ID, 'emaily_campaign_start_time', true);
 				return esc_html($start_time ? $start_time : 'N/A');
@@ -109,3 +116,4 @@ function emaily_campaigns_dashboard_page() {
 	</div>
 	<?php
 }
+
