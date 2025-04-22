@@ -182,7 +182,6 @@ function emaily_admin_enqueue($hook) {
 		);
 	}
 	if (($hook === 'post.php' || $hook === 'post-new.php') && $post_type === 'emaily_form') {
-		// Use WordPress bundled jQuery UI scripts
 		wp_enqueue_script('jquery-ui-core');
 		wp_enqueue_script('jquery-ui-selectmenu');
 		wp_enqueue_script('jquery-ui-sortable');
@@ -199,7 +198,6 @@ function emaily_admin_enqueue($hook) {
 			array(),
 			'2.0'
 		);
-		// Enqueue WordPress's jQuery UI CSS
 		wp_enqueue_style('jquery-ui-css', includes_url('css/jquery-ui.min.css'), array(), null);
 	}
 	if ($hook === 'toplevel_page_emaily' || $hook === 'emaily_page_emaily-campaigns-dashboard') {
@@ -366,7 +364,7 @@ function emaily_import_users() {
 }
 add_action('wp_ajax_emaily_import_users', 'emaily_import_users');
 
-// Handle AJAX form submission
+// Handle AJAX form submission with email verification
 function emaily_handle_form_submission() {
 	check_ajax_referer('emaily_form_submit', 'nonce');
 
@@ -393,7 +391,14 @@ function emaily_handle_form_submission() {
 	}
 
 	if (email_exists($email)) {
-		wp_send_json_error(array('message' => __('This email is already subscribed.', 'emaily')));
+		$user = get_user_by('email', $email);
+		$status = get_user_meta($user->ID, 'emaily_verification_status', true);
+		if ($status === 'verified') {
+			wp_send_json_error(array('message' => __('This email is already subscribed.', 'emaily')));
+		} else {
+			// Delete the pending user and allow resubscription
+			wp_delete_user($user->ID);
+		}
 	}
 
 	$name = isset($_POST['emaily_name']) ? sanitize_text_field($_POST['emaily_name']) : '';
@@ -413,6 +418,7 @@ function emaily_handle_form_submission() {
 		wp_send_json_error(array('message' => __('Failed to subscribe: ') . $user_id->get_error_message()));
 	}
 
+	// Store additional fields as user meta
 	foreach ($fields as $field) {
 		if ($field === 'Email' || $field === 'Name') {
 			continue;
@@ -424,19 +430,132 @@ function emaily_handle_form_submission() {
 		}
 	}
 
-	foreach ($lists as $list_id) {
-		$list_users = get_post_meta($list_id, 'email_contact_list_users', true);
-		$list_users = is_array($list_users) ? $list_users : array();
-		if (!in_array($email, $list_users)) {
-			$list_users[] = $email;
-			update_post_meta($list_id, 'email_contact_list_users', $list_users);
-		}
+	// Store verification data
+	$token = wp_generate_uuid4();
+	update_user_meta($user_id, 'emaily_verification_status', 'pending');
+	update_user_meta($user_id, 'emaily_verification_token', $token);
+	update_user_meta($user_id, 'emaily_subscription_time', current_time('timestamp'));
+	update_user_meta($user_id, 'emaily_contact_lists', $lists);
+
+	// Send verification email
+	$verification_link = add_query_arg(
+		array(
+			'emaily_verify' => '1',
+			'user_id'       => $user_id,
+			'token'         => $token,
+		),
+		home_url('/')
+	);
+
+	$subject = __('Verify Your Subscription', 'emaily');
+	$message = sprintf(
+		__('Hello %s,') . "\n\n" .
+		__('Thank you for subscribing! Please verify your email address by clicking the link below:') . "\n\n" .
+		__('%s') . "\n\n" .
+		__('This link will expire in 24 hours. If you did not request this subscription, please ignore this email.') . "\n\n" .
+		__('Best regards,') . "\n" .
+		__('The Emaily Team'),
+		$name ?: $email,
+		$verification_link
+	);
+
+	$headers = array('Content-Type: text/plain; charset=UTF-8');
+	$sent = wp_mail($email, $subject, $message, $headers);
+
+	if (!$sent) {
+		wp_delete_user($user_id);
+		wp_send_json_error(array('message' => __('Failed to send verification email. Please try again.', 'emaily')));
 	}
 
-	wp_send_json_success(array('message' => __('Successfully subscribed!', 'emaily')));
+	wp_send_json_success(array('message' => __('Please check your email to verify your subscription.', 'emaily')));
 }
 add_action('wp_ajax_emaily_form_submit', 'emaily_handle_form_submission');
 add_action('wp_ajax_nopriv_emaily_form_submit', 'emaily_handle_form_submission');
+
+// Handle email verification
+function emaily_handle_verification() {
+	if (!isset($_GET['emaily_verify']) || $_GET['emaily_verify'] !== '1') {
+		return;
+	}
+
+	$user_id = isset($_GET['user_id']) ? intval($_GET['user_id']) : 0;
+	$token = isset($_GET['token']) ? sanitize_text_field($_GET['token']) : '';
+
+	if (!$user_id || !$token) {
+		wp_die(__('Invalid verification link.', 'emaily'), __('Verification Error', 'emaily'));
+	}
+
+	$user = get_user_by('ID', $user_id);
+	if (!$user) {
+		wp_die(__('User not found.', 'emaily'), __('Verification Error', 'emaily'));
+	}
+
+	$stored_token = get_user_meta($user_id, 'emaily_verification_token', true);
+	$status = get_user_meta($user_id, 'emaily_verification_status', true);
+
+	if ($status === 'verified') {
+		wp_die(__('This email is already verified.', 'emaily'), __('Verification Error', 'emaily'));
+	}
+
+	if ($token !== $stored_token) {
+		wp_die(__('Invalid verification token.', 'emaily'), __('Verification Error', 'emaily'));
+	}
+
+	// Check if the subscription has expired
+	$subscription_time = get_user_meta($user_id, 'emaily_subscription_time', true);
+	$expiry_time = 24 * HOUR_IN_SECONDS; // 24 hours
+	if ((current_time('timestamp') - $subscription_time) > $expiry_time) {
+		wp_delete_user($user_id);
+		wp_die(__('Verification link has expired. Please subscribe again.', 'emaily'), __('Verification Error', 'emaily'));
+	}
+
+	// Mark as verified and add to contact lists
+	update_user_meta($user_id, 'emaily_verification_status', 'verified');
+	delete_user_meta($user_id, 'emaily_verification_token');
+	delete_user_meta($user_id, 'emaily_subscription_time');
+
+	$lists = get_user_meta($user_id, 'emaily_contact_lists', true);
+	$lists = is_array($lists) ? $lists : array();
+	foreach ($lists as $list_id) {
+		$list_users = get_post_meta($list_id, 'email_contact_list_users', true);
+		$list_users = is_array($list_users) ? $list_users : array();
+		if (!in_array($user->user_email, $list_users)) {
+			$list_users[] = $user->user_email;
+			update_post_meta($list_id, 'email_contact_list_users', $list_users);
+		}
+	}
+	delete_user_meta($user_id, 'emaily_contact_lists');
+
+	wp_redirect(add_query_arg('emaily_verified', '1', home_url('/')));
+	exit;
+}
+add_action('init', 'emaily_handle_verification');
+
+// Schedule cron job to clean up unverified users
+function emaily_schedule_cleanup() {
+	if (!wp_next_scheduled('emaily_cleanup_unverified_users')) {
+		wp_schedule_event(time(), 'hourly', 'emaily_cleanup_unverified_users');
+	}
+}
+add_action('wp', 'emaily_schedule_cleanup');
+
+// Cleanup unverified users
+function emaily_cleanup_unverified_users() {
+	$users = get_users(array(
+		'meta_key'     => 'emaily_verification_status',
+		'meta_value'   => 'pending',
+		'meta_compare' => '=',
+	));
+
+	$expiry_time = 24 * HOUR_IN_SECONDS; // 24 hours
+	foreach ($users as $user) {
+		$subscription_time = get_user_meta($user->ID, 'emaily_subscription_time', true);
+		if ($subscription_time && (current_time('timestamp') - $subscription_time) > $expiry_time) {
+			wp_delete_user($user->ID);
+		}
+	}
+}
+add_action('emaily_cleanup_unverified_users', 'emaily_cleanup_unverified_users');
 
 // Add Audience Count column to email_contact_list
 function emaily_contact_list_columns($columns) {
@@ -533,3 +652,11 @@ function emaily_load_textdomain() {
 }
 add_action('plugins_loaded', 'emaily_load_textdomain');
 
+// Deactivate cron on plugin deactivation
+function emaily_deactivate() {
+	$timestamp = wp_next_scheduled('emaily_cleanup_unverified_users');
+	if ($timestamp) {
+		wp_unschedule_event($timestamp, 'emaily_cleanup_unverified_users');
+	}
+}
+register_deactivation_hook(__FILE__, 'emaily_deactivate');

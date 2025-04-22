@@ -32,13 +32,18 @@ function emaily_form_shortcode($atts) {
 	ob_start();
 	?>
 	<div class="emaily-form-wrapper" data-form-type="<?php echo esc_attr($form_type); ?>">
+		<?php if (isset($_GET['emaily_verified']) && $_GET['emaily_verified'] === '1') : ?>
+			<div class="emaily-form-message success">
+				<?php esc_html_e('Your email has been verified! Thank you for subscribing.', 'emaily'); ?>
+			</div>
+		<?php endif; ?>
 		<?php if ($form_type === 'Popup box') : ?>
 			<button type="button" class="emaily-popup-button button">
 				<?php esc_html_e('Subscribe Now', 'emaily'); ?>
 			</button>
 			<div class="emaily-popup-overlay" style="display: none;">
 				<div class="emaily-popup-content">
-					<span class="emaily-popup-close">&times;</span>
+					<span class="emaily-popup-close">×</span>
 					<h2><?php echo esc_html($post->post_title); ?></h2>
 					<?php echo wp_kses_post($post->post_content); ?>
 					<form class="emaily-form emaily-ajax-form" data-form-id="<?php echo esc_attr($form_id); ?>">
