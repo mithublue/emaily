@@ -9,6 +9,7 @@ use Carbon_Fields\Field;
 
 add_action('carbon_fields_register_fields', 'emaily_campaign_fields');
 function emaily_campaign_fields() {
+
 	Container::make('post_meta', __('Campaign Details', 'emaily'))
 	         ->where('post_type', '=', 'emaily_campaign')
 	         ->add_fields(array(
@@ -17,6 +18,15 @@ function emaily_campaign_fields() {
 		         Field::make('multiselect', 'emaily_campaign_lists', __('Select Contact Lists', 'emaily'))
 		              ->add_options('emaily_get_contact_lists')
 		              ->set_help_text(__('Select the contact lists to send this campaign to.', 'emaily')),
+		         Field::make( 'date_time', 'emaily_campaign_schedule', __( 'Schedule Date & Time', 'your-text-domain' ) )
+		              ->set_storage_format( 'Y-m-d H:i:s' ) // Optional: set how it's stored in the DB
+		              ->set_help_text( 'Set when this campaign should be sent.' )
+		              ->set_picker_options(array(
+			              'allowInput' => true,
+			              'enableTime' => true,
+			              'minDate'    => 'today',
+		              ))
+		              ->set_help_text(__('Set the date and time to schedule the campaign (e.g., 2025-04-23 10:00:00). The campaign will be scheduled automatically when published.', 'emaily')),
 	         ));
 }
 
@@ -73,74 +83,97 @@ function emaily_register_campaign_post_type() {
 }
 add_action('init', 'emaily_register_campaign_post_type');
 
-add_action('admin_enqueue_scripts', 'emaily_campaign_enqueue_scripts');
-function emaily_campaign_enqueue_scripts($hook) {
-	global $post_type;
-	if (($hook === 'post.php' || $hook === 'post-new.php') && $post_type === 'emaily_campaign') {
-		wp_enqueue_script(
-			'emaily-campaign-js',
-			plugin_dir_url(__FILE__) . 'assets/js/campaign.js',
-			array('jquery'),
-			'2.0',
-			true
-		);
-		wp_localize_script(
-			'emaily-campaign-js',
-			'emailyCampaignAjax',
-			array(
-				'ajax_url' => admin_url('admin-ajax.php'),
-				'nonce'    => wp_create_nonce('emaily_campaign_action'),
-			)
-		);
+// Handle scheduling on post status transition
+add_action('transition_post_status', 'emaily_handle_campaign_scheduling', 10, 3);
+function emaily_handle_campaign_scheduling($new_status, $old_status, $post) {
+	if ($post->post_type !== 'emaily_campaign') {
+		return;
+	}
+
+	$campaign_id = $post->ID;
+	$event_hook = "emaily_send_campaign_{$campaign_id}";
+
+	// Unschedule the campaign if the new status is not 'publish'
+	if ($new_status !== 'publish') {
+		$timestamp = wp_next_scheduled($event_hook, array($campaign_id));
+		if ($timestamp) {
+			wp_unschedule_event($timestamp, $event_hook, array($campaign_id));
+			error_log("Unscheduled campaign $campaign_id due to status change to $new_status");
+		}
+		return;
+	}
+
+	// If the new status is 'publish', schedule the campaign
+	if ($new_status === 'publish' && $old_status !== 'publish') {
+		$schedule_time = get_post_meta($campaign_id, 'emaily_campaign_schedule', true);
+		if (empty($schedule_time)) {
+			error_log("Campaign $campaign_id not scheduled: No schedule time set.");
+			return;
+		}
+
+		$lists = get_post_meta($campaign_id, 'emaily_campaign_lists', true);
+		if (empty($lists)) {
+			error_log("Campaign $campaign_id not scheduled: No contact lists selected.");
+			return;
+		}
+
+		$recipients = array();
+		foreach ($lists as $list_id) {
+			$list_users = get_post_meta($list_id, 'email_contact_list_users', true);
+			if (is_array($list_users)) {
+				$recipients = array_merge($recipients, $list_users);
+			}
+		}
+		$recipients = array_unique($recipients);
+
+		if (empty($recipients)) {
+			error_log("Campaign $campaign_id not scheduled: No recipients found in the selected lists.");
+			return;
+		}
+
+		$schedule_timestamp = strtotime($schedule_time);
+		if ($schedule_timestamp < current_time('timestamp')) {
+			error_log("Campaign $campaign_id not scheduled: Schedule time $schedule_time is in the past.");
+			return;
+		}
+
+		// Unschedule any existing event to avoid duplicates
+		$timestamp = wp_next_scheduled($event_hook, array($campaign_id));
+		if ($timestamp) {
+			wp_unschedule_event($timestamp, $event_hook, array($campaign_id));
+		}
+
+		// Schedule the new event
+		wp_schedule_single_event($schedule_timestamp, $event_hook, array($campaign_id));
+		update_post_meta($campaign_id, 'emaily_campaign_recipients', $recipients);
+		error_log("Scheduled campaign $campaign_id for $schedule_time");
 	}
 }
 
-add_action('wp_ajax_emaily_schedule_campaign', 'emaily_schedule_campaign');
-function emaily_schedule_campaign() {
-	check_ajax_referer('emaily_campaign_action', 'nonce');
-
-	if (!current_user_can('manage_options')) {
-		wp_send_json_error(array('message' => __('Permission denied.', 'emaily')));
+// Debug: Log when the meta field is saved
+add_action('carbon_fields_post_meta_container_saved', 'emaily_debug_schedule_save', 10, 2);
+function emaily_debug_schedule_save($post_id, $container) {
+	if (get_post_type($post_id) !== 'emaily_campaign') {
+		return;
 	}
 
-	$campaign_id = isset($_POST['campaign_id']) ? intval($_POST['campaign_id']) : 0;
-	$schedule_time = isset($_POST['schedule_time']) ? sanitize_text_field($_POST['schedule_time']) : '';
+	$schedule_time = isset($_POST['carbon_fields_container_campaign_details']['emaily_campaign_schedule'])
+		? sanitize_text_field($_POST['carbon_fields_container_campaign_details']['emaily_campaign_schedule'])
+		: '';
 
-	if (!$campaign_id || !$schedule_time) {
-		wp_send_json_error(array('message' => __('Invalid campaign ID or schedule time.', 'emaily')));
-	}
+	$log_message = "Saving campaign $post_id - Schedule Time: " . ($schedule_time ?: 'Not set');
+	error_log($log_message);
 
-	$campaign = get_post($campaign_id);
-	if (!$campaign || $campaign->post_type !== 'emaily_campaign') {
-		wp_send_json_error(array('message' => __('Invalid campaign.', 'emaily')));
-	}
-
-	$lists = get_post_meta($campaign_id, 'emaily_campaign_lists', true);
-	if (empty($lists)) {
-		wp_send_json_error(array('message' => __('No contact lists selected.', 'emaily')));
-	}
-
-	$recipients = array();
-	foreach ($lists as $list_id) {
-		$list_users = get_post_meta($list_id, 'email_contact_list_users', true);
-		if (is_array($list_users)) {
-			$recipients = array_merge($recipients, $list_users);
+	// Fallback: Manually save the field if Carbon Fields fails
+	if ($schedule_time) {
+		$existing_value = get_post_meta($post_id, 'emaily_campaign_schedule', true);
+		if ($existing_value !== $schedule_time) {
+			update_post_meta($post_id, 'emaily_campaign_schedule', $schedule_time);
+			error_log("Manually saved emaily_campaign_schedule for campaign $post_id: $schedule_time");
 		}
+	} elseif (isset($_POST['carbon_fields_container_campaign_details']['emaily_campaign_schedule']) && empty($schedule_time)) {
+		// If the field is cleared, delete the meta
+		delete_post_meta($post_id, 'emaily_campaign_schedule');
+		error_log("Deleted emaily_campaign_schedule for campaign $post_id");
 	}
-	$recipients = array_unique($recipients);
-
-	if (empty($recipients)) {
-		wp_send_json_error(array('message' => __('No recipients found in the selected lists.', 'emaily')));
-	}
-
-	update_post_meta($campaign_id, 'emaily_campaign_recipients', $recipients);
-	update_post_meta($campaign_id, 'emaily_campaign_schedule', $schedule_time);
-
-	$schedule_timestamp = strtotime($schedule_time);
-	if ($schedule_timestamp < current_time('timestamp')) {
-		wp_send_json_error(array('message' => __('Schedule time must be in the future.', 'emaily')));
-	}
-
-	wp_schedule_single_event($schedule_timestamp, "emaily_send_campaign_{$campaign_id}", array($campaign_id));
-	wp_send_json_success(array('message' => __('Campaign scheduled successfully!', 'emaily')));
 }
