@@ -9,7 +9,6 @@ use Carbon_Fields\Field;
 
 add_action('carbon_fields_register_fields', 'emaily_campaign_fields');
 function emaily_campaign_fields() {
-
 	Container::make('post_meta', __('Campaign Details', 'emaily'))
 	         ->where('post_type', '=', 'emaily_campaign')
 	         ->add_fields(array(
@@ -18,12 +17,13 @@ function emaily_campaign_fields() {
 		         Field::make('multiselect', 'emaily_campaign_lists', __('Select Contact Lists', 'emaily'))
 		              ->add_options('emaily_get_contact_lists')
 		              ->set_help_text(__('Select the contact lists to send this campaign to.', 'emaily')),
-		         Field::make( 'date_time', 'emaily_campaign_schedule', __( 'Schedule Date & Time', 'your-text-domain' ) )
-		              ->set_storage_format( 'Y-m-d H:i:s' ) // Optional: set how it's stored in the DB
-		              ->set_help_text( 'Set when this campaign should be sent.' )
+		         Field::make('date_time', 'emaily_campaign_schedule', __('Schedule Campaign', 'emaily'))
+		              ->set_storage_format('Y-m-d H:i:s')
+		              ->set_input_format('Y-m-d H:i:s', 'Y-m-d H:i:s')
 		              ->set_picker_options(array(
 			              'allowInput' => true,
 			              'enableTime' => true,
+			              'time_24hr'  => true,
 			              'minDate'    => 'today',
 		              ))
 		              ->set_help_text(__('Set the date and time to schedule the campaign (e.g., 2025-04-23 10:00:00). The campaign will be scheduled automatically when published.', 'emaily')),
@@ -147,6 +147,12 @@ function emaily_handle_campaign_scheduling($new_status, $old_status, $post) {
 		wp_schedule_single_event($schedule_timestamp, $event_hook, array($campaign_id));
 		update_post_meta($campaign_id, 'emaily_campaign_recipients', $recipients);
 		error_log("Scheduled campaign $campaign_id for $schedule_time");
+
+		// Explicitly hook the dynamic event to trigger the emaily_send_campaign action
+		add_action($event_hook, function($campaign_id) use ( $event_hook ) {
+			error_log("Dynamic hook $event_hook triggered for campaign ID: $campaign_id");
+			do_action('emaily_send_campaign', $campaign_id);
+		}, 10, 1);
 	}
 }
 

@@ -4,16 +4,32 @@ if (!defined('ABSPATH')) {
 	exit;
 }
 
+function emaily_log($campaign_id, $message) {
+	$log_dir = plugin_dir_path(__FILE__) . 'logs';
+	if (!file_exists($log_dir)) {
+		mkdir($log_dir, 0755, true);
+	}
+	$log_file = $log_dir . '/emaily.log';
+	$timestamp = current_time('Y-m-d H:i:s');
+	$log_message = "[$timestamp] Campaign ID: $campaign_id - $message\n";
+	file_put_contents($log_file, $log_message, FILE_APPEND);
+}
+
 function emaily_send_campaign($campaign_id) {
+	// Debug: Log that the function is triggered
+	error_log("emaily_send_campaign triggered for campaign ID: $campaign_id");
+
 	$campaign = get_post($campaign_id);
 	if (!$campaign || $campaign->post_type !== 'emaily_campaign') {
 		emaily_log($campaign_id, "Campaign sending failed: Invalid campaign ID");
+		error_log("Campaign sending failed for ID $campaign_id: Invalid campaign");
 		return;
 	}
 
 	$recipients = get_post_meta($campaign_id, 'emaily_campaign_recipients', true);
 	if (empty($recipients) || !is_array($recipients)) {
 		emaily_log($campaign_id, "Campaign sending failed: No recipients found");
+		error_log("Campaign sending failed for ID $campaign_id: No recipients found");
 		return;
 	}
 
@@ -53,12 +69,14 @@ function emaily_send_campaign($campaign_id) {
 		$user = get_user_by('email', $email);
 		if (!$user) {
 			emaily_log($campaign_id, "Recipient not found: $email");
+			error_log("Recipient not found for campaign ID $campaign_id: $email");
 			continue;
 		}
 
 		$status = get_user_meta($user->ID, 'emaily_verification_status', true);
 		if ($status !== 'verified') {
 			emaily_log($campaign_id, "Recipient not verified: $email");
+			error_log("Recipient not verified for campaign ID $campaign_id: $email");
 			continue;
 		}
 
@@ -95,23 +113,17 @@ function emaily_send_campaign($campaign_id) {
 		$sent = wp_mail($email, $subject, $email_content, $headers);
 		if ($sent) {
 			emaily_log($campaign_id, "Email sent to $email");
+			error_log("Email sent to $email for campaign ID $campaign_id");
 		} else {
 			emaily_log($campaign_id, "Failed to send email to $email");
+			error_log("Failed to send email to $email for campaign ID $campaign_id");
 		}
 	}
 
 	update_post_meta($campaign_id, 'emaily_campaign_status', 'sent');
+	error_log("Campaign $campaign_id completed sending");
 }
+
+// Hook the function to the base action, which will catch dynamic suffixes
 add_action('emaily_send_campaign', 'emaily_send_campaign', 10, 1);
 
-function emaily_log($campaign_id, $message) {
-	$log_dir = plugin_dir_path(__FILE__) . 'logs/';
-	if (!file_exists($log_dir)) {
-		mkdir($log_dir, 0755, true);
-	}
-
-	$log_file = $log_dir . 'emaily.log';
-	$timestamp = current_time('mysql');
-	$log_entry = "[$timestamp] Campaign ID: $campaign_id - $message\n";
-	file_put_contents($log_file, $log_entry, FILE_APPEND);
-}
