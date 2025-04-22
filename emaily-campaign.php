@@ -99,13 +99,13 @@ function emaily_handle_campaign_scheduling($new_status, $old_status, $post) {
 
 	// If the new status is 'publish', schedule the campaign
 	if ($new_status === 'publish' && $old_status !== 'publish') {
-		$schedule_time = get_post_meta($campaign_id, 'emaily_campaign_schedule', true);
+		$schedule_time = carbon_get_post_meta($campaign_id, 'emaily_campaign_schedule');
 		if (empty($schedule_time)) {
 			error_log("Campaign $campaign_id not scheduled: No schedule time set.");
 			return;
 		}
 
-		$lists = get_post_meta($campaign_id, 'emaily_campaign_lists', true);
+		$lists = carbon_get_post_meta($campaign_id, 'emaily_campaign_lists' );
 		if (empty($lists)) {
 			error_log("Campaign $campaign_id not scheduled: No contact lists selected.");
 			return;
