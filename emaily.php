@@ -23,6 +23,7 @@ require_once __DIR__ . '/emaily-email-sender.php';
 require_once __DIR__ . '/emaily-campaigns-dashboard.php';
 require_once __DIR__ . '/emaily-form.php';
 require_once __DIR__ . '/shortcode.php';
+require_once __DIR__ . '/emaily-settings.php';
 
 // Register the custom post type 'email_contact_list'
 function emaily_register_post_type() {
@@ -84,6 +85,14 @@ function emaily_admin_menu() {
 		__('Forms', 'emaily'),
 		'manage_options',
 		'edit.php?post_type=emaily_form'
+	);
+	add_submenu_page(
+		'emaily',
+		__('Settings', 'emaily'),
+		__('Settings', 'emaily'),
+		'manage_options',
+		'emaily-settings',
+		'emaily_settings_page'
 	);
 }
 add_action('admin_menu', 'emaily_admin_menu');
@@ -200,7 +209,7 @@ function emaily_admin_enqueue($hook) {
 		);
 		wp_enqueue_style('jquery-ui-css', includes_url('css/jquery-ui.min.css'), array(), null);
 	}
-	if ($hook === 'toplevel_page_emaily' || $hook === 'emaily_page_emaily-campaigns-dashboard') {
+	if ($hook === 'toplevel_page_emaily' || $hook === 'emaily_page_emaily-campaigns-dashboard' || $hook === 'emaily_page_emaily-settings') {
 		wp_enqueue_style(
 			'emaily-admin-css',
 			plugin_dir_url(__FILE__) . 'assets/css/admin-style.css',
@@ -467,7 +476,8 @@ function emaily_handle_form_submission() {
 		wp_send_json_error(array('message' => __('Failed to send verification email. Please try again.', 'emaily')));
 	}
 
-	wp_send_json_success(array('message' => __('Please check your email to verify your subscription.', 'emaily')));
+	$submission_message = carbon_get_theme_option('emaily_form_submission_message') ?: __('Please check your email to verify your subscription.', 'emaily');
+	wp_send_json_success(array('message' => $submission_message));
 }
 add_action('wp_ajax_emaily_form_submit', 'emaily_handle_form_submission');
 add_action('wp_ajax_nopriv_emaily_form_submit', 'emaily_handle_form_submission');
@@ -481,24 +491,31 @@ function emaily_handle_verification() {
 	$user_id = isset($_GET['user_id']) ? intval($_GET['user_id']) : 0;
 	$token = isset($_GET['token']) ? sanitize_text_field($_GET['token']) : '';
 
+	$confirmation_page_id = carbon_get_theme_option('emaily_confirmation_page');
+	$confirmation_page_url = $confirmation_page_id ? get_permalink($confirmation_page_id) : home_url('/');
+
 	if (!$user_id || !$token) {
-		wp_die(__('Invalid verification link.', 'emaily'), __('Verification Error', 'emaily'));
+		wp_redirect(add_query_arg('emaily_verification_status', 'error', $confirmation_page_url));
+		exit;
 	}
 
 	$user = get_user_by('ID', $user_id);
 	if (!$user) {
-		wp_die(__('User not found.', 'emaily'), __('Verification Error', 'emaily'));
+		wp_redirect(add_query_arg('emaily_verification_status', 'error', $confirmation_page_url));
+		exit;
 	}
 
 	$stored_token = get_user_meta($user_id, 'emaily_verification_token', true);
 	$status = get_user_meta($user_id, 'emaily_verification_status', true);
 
 	if ($status === 'verified') {
-		wp_die(__('This email is already verified.', 'emaily'), __('Verification Error', 'emaily'));
+		wp_redirect(add_query_arg('emaily_verification_status', 'already_verified', $confirmation_page_url));
+		exit;
 	}
 
 	if ($token !== $stored_token) {
-		wp_die(__('Invalid verification token.', 'emaily'), __('Verification Error', 'emaily'));
+		wp_redirect(add_query_arg('emaily_verification_status', 'invalid_token', $confirmation_page_url));
+		exit;
 	}
 
 	// Check if the subscription has expired
@@ -506,7 +523,8 @@ function emaily_handle_verification() {
 	$expiry_time = 24 * HOUR_IN_SECONDS; // 24 hours
 	if ((current_time('timestamp') - $subscription_time) > $expiry_time) {
 		wp_delete_user($user_id);
-		wp_die(__('Verification link has expired. Please subscribe again.', 'emaily'), __('Verification Error', 'emaily'));
+		wp_redirect(add_query_arg('emaily_verification_status', 'expired', $confirmation_page_url));
+		exit;
 	}
 
 	// Mark as verified and add to contact lists
@@ -526,7 +544,7 @@ function emaily_handle_verification() {
 	}
 	delete_user_meta($user_id, 'emaily_contact_lists');
 
-	wp_redirect(add_query_arg('emaily_verified', '1', home_url('/')));
+	wp_redirect(add_query_arg('emaily_verification_status', 'success', $confirmation_page_url));
 	exit;
 }
 add_action('init', 'emaily_handle_verification');
@@ -654,9 +672,25 @@ add_action('plugins_loaded', 'emaily_load_textdomain');
 
 // Deactivate cron on plugin deactivation
 function emaily_deactivate() {
+	// Clear unverified users cleanup cron
 	$timestamp = wp_next_scheduled('emaily_cleanup_unverified_users');
 	if ($timestamp) {
 		wp_unschedule_event($timestamp, 'emaily_cleanup_unverified_users');
+	}
+
+	// Clear all emaily_send_campaign_{$post_id} events
+	$args = array(
+		'post_type'      => 'emaily_campaign',
+		'posts_per_page' => -1,
+		'post_status'    => 'any',
+	);
+	$campaigns = get_posts($args);
+	foreach ($campaigns as $campaign) {
+		$event_hook = "emaily_send_campaign_{$campaign->ID}";
+		$timestamp = wp_next_scheduled($event_hook, array($campaign->ID));
+		if ($timestamp) {
+			wp_unschedule_event($timestamp, $event_hook, array($campaign->ID));
+		}
 	}
 }
 register_deactivation_hook(__FILE__, 'emaily_deactivate');

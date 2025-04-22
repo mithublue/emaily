@@ -29,12 +29,28 @@ function emaily_form_shortcode($atts) {
 	$form_type = get_post_meta($form_id, 'emaily_form_type', true);
 	$form_type = !empty($form_type) ? $form_type : 'Embedded form';
 
+	// Get custom messages from settings
+	$confirmation_success_message = carbon_get_theme_option('emaily_confirmation_success_message') ?: __('Your email has been verified! Thank you for subscribing.', 'emaily');
+	$confirmation_failed_message = carbon_get_theme_option('emaily_confirmation_failed_message') ?: __('Email verification failed. Please try subscribing again.', 'emaily');
+
 	ob_start();
 	?>
 	<div class="emaily-form-wrapper" data-form-type="<?php echo esc_attr($form_type); ?>">
-		<?php if (isset($_GET['emaily_verified']) && $_GET['emaily_verified'] === '1') : ?>
-			<div class="emaily-form-message success">
-				<?php esc_html_e('Your email has been verified! Thank you for subscribing.', 'emaily'); ?>
+		<?php if (isset($_GET['emaily_verification_status'])) : ?>
+			<div class="emaily-form-message <?php echo $_GET['emaily_verification_status'] === 'success' ? 'success' : 'error'; ?>">
+				<?php
+				if ($_GET['emaily_verification_status'] === 'success') {
+					echo esc_html($confirmation_success_message);
+				} elseif ($_GET['emaily_verification_status'] === 'already_verified') {
+					echo esc_html__('This email is already verified.', 'emaily');
+				} elseif ($_GET['emaily_verification_status'] === 'expired') {
+					echo esc_html__('Verification link has expired. Please subscribe again.', 'emaily');
+				} elseif ($_GET['emaily_verification_status'] === 'invalid_token') {
+					echo esc_html__('Invalid verification token.', 'emaily');
+				} else {
+					echo esc_html($confirmation_failed_message);
+				}
+				?>
 			</div>
 		<?php endif; ?>
 		<?php if ($form_type === 'Popup box') : ?>
@@ -192,4 +208,3 @@ function emaily_form_shortcode($atts) {
 	return ob_get_clean();
 }
 add_shortcode('emaily_form', 'emaily_form_shortcode');
-
