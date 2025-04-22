@@ -17,15 +17,9 @@ function emaily_campaign_fields() {
 		         Field::make('multiselect', 'emaily_campaign_lists', __('Select Contact Lists', 'emaily'))
 		              ->add_options('emaily_get_contact_lists')
 		              ->set_help_text(__('Select the contact lists to send this campaign to.', 'emaily')),
-		         Field::make('date_time', 'emaily_campaign_schedule', __('Schedule Campaign', 'emaily'))
-		              ->set_storage_format('Y-m-d H:i:s')
-		              ->set_input_format('Y-m-d H:i:s', 'Y-m-d H:i:s')
-		              ->set_picker_options(array(
-			              'allowInput' => true,
-			              'enableTime' => true,
-			              'time_24hr'  => true,
-			              'minDate'    => 'today',
-		              ))
+		         Field::make( 'date_time', 'emaily_campaign_schedule', __( 'Schedule Date & Time', 'your-text-domain' ) )
+		              ->set_storage_format( 'Y-m-d H:i:s' ) // Optional: set how it's stored in the DB
+		              ->set_help_text( 'Set when this campaign should be sent.' )
 		              ->set_help_text(__('Set the date and time to schedule the campaign (e.g., 2025-04-23 10:00:00). The campaign will be scheduled automatically when published.', 'emaily')),
 	         ));
 }
