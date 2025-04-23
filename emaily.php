@@ -24,6 +24,7 @@ require_once __DIR__ . '/emaily-campaigns-dashboard.php';
 require_once __DIR__ . '/emaily-form.php';
 require_once __DIR__ . '/shortcode.php';
 require_once __DIR__ . '/emaily-settings.php';
+require_once __DIR__ . '/helper.php';
 
 // Register the custom post type 'email_contact_list'
 function emaily_register_post_type() {
@@ -339,7 +340,7 @@ function emaily_import_users() {
 		}
 
 		foreach ($all_fields as $field) {
-			if ($field === 'Email' || $field === 'Name' || empty($row[$field])) {
+			if ($field === 'Email' || empty($row[$field])) {
 				continue;
 			}
 			$meta_key = 'emaily_' . strtolower(str_replace(' ', '_', $field));

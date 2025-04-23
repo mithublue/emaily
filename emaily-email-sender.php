@@ -23,10 +23,10 @@ function emaily_send_campaign($campaign_id) {
 	// Check global lock to prevent concurrent sending
 	$lock_key = 'emaily_email_sending_lock';
 	$lock_duration = 300; // 5 minutes
-	if (get_transient($lock_key)) {
+	/*if (get_transient($lock_key)) {
 		emaily_log($campaign_id, "Skipped sending: Another campaign is processing.");
 		return;
-	}
+	}*/
 
 	// Set lock
 	set_transient($lock_key, true, $lock_duration);
@@ -52,8 +52,8 @@ function emaily_send_campaign($campaign_id) {
 			delete_transient($lock_key);
 			return;
 		}
-		// Convert recipients to queue format (preserve associative data)
-		$email_queue = array_values($recipients); // Ensure indexed array for queue
+		// Convert recipients to queue format (flat array of emails)
+		$email_queue = $recipients; // Use email addresses only
 		update_post_meta($campaign_id, 'emaily_campaign_email_queue', $email_queue);
 	}
 
@@ -76,17 +76,18 @@ function emaily_send_campaign($campaign_id) {
 	// Max retries for failed emails
 	$max_retries = 3;
 
+	//generate placeholders that will be matched in content and will be replaced by user data
+	$placeholders = emaily_generate_placeholders();
+
 	// Send emails
-	foreach ($emails_to_send as $recipient_data) {
-		if (!isset($recipient_data['email']) || !is_email($recipient_data['email'])) {
-			emaily_log($campaign_id, "Invalid email skipped: " . print_r($recipient_data, true));
+	foreach ($emails_to_send as $email) {
+		if (!is_email($email)) {
+			emaily_log($campaign_id, "Invalid email skipped: $email");
 			continue;
 		}
 
-		$email = $recipient_data['email'];
-
 		// Replace placeholders in content
-		$personalized_content = emaily_replace_placeholders($content, $recipient_data);
+		$personalized_content = emaily_replace_placeholders($content, $email, $placeholders);
 
 		// Combine preheader and content
 		$email_content = '';
@@ -134,7 +135,7 @@ function emaily_send_campaign($campaign_id) {
 	update_post_meta($campaign_id, 'emaily_campaign_failed_emails', $failed_emails);
 
 	// Update queue
-	$remaining_emails = array_diff_key($email_queue, array_fill_keys(array_keys($emails_to_send), null));
+	$remaining_emails = array_diff($email_queue, $emails_to_send);
 	if (empty($remaining_emails)) {
 		// All emails sent
 		update_post_meta($campaign_id, 'emaily_campaign_all_emails_sent', true);

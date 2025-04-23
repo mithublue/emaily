@@ -79,6 +79,7 @@ function emaily_check_campaigns() {
 			} else {
 				emaily_log($campaign_id, "Campaign not found or unpublished, removing from schedule.");
 			}
+			exit;
 			// Remove from schedule
 			unset($scheduled_campaigns[$campaign_id]);
 		}
@@ -140,15 +141,19 @@ function emaily_get_contact_lists() {
 }
 
 // Replace placeholders in campaign content
-function emaily_replace_placeholders($content, $recipient_data) {
-	$placeholders = [
-		'%email%' => isset($recipient_data['email']) ? sanitize_email($recipient_data['email']) : '',
-		'%name%'  => isset($recipient_data['name']) ? sanitize_text_field($recipient_data['name']) : '',
-	];
+function emaily_replace_placeholders($content, $email, $placeholders ) {
+
+	//get user by email
+	$user = get_user_by('email', $email);
+
+	$replacables = [];
+	foreach ( $placeholders as $placeholder ) {
+		$replacables['%'.$placeholder.'%'] = emaily_get_user_info( $user, $placeholder );
+	}
 
 	return str_replace(
-		array_keys($placeholders),
-		array_values($placeholders),
+		array_keys($replacables),
+		array_values($replacables),
 		$content
 	);
 }
