@@ -108,6 +108,21 @@ function emaily_campaign_fields() {
 		                                            ->set_storage_format('Y-m-d H:i:s')
 		                                            ->set_help_text(__('Set the date and time to schedule the campaign (e.g., 2025-04-23 10:00:00). The campaign will be scheduled automatically when published.', 'emaily')),
 	                        ));
+
+	// Add help text for placeholders in the editor
+	add_action('admin_footer', function() {
+		if (get_current_screen()->post_type === 'emaily_campaign') {
+			?>
+			<script>
+				jQuery(document).ready(function($) {
+					if ($('#postdivrich').length) {
+						$('#postdivrich').append('<p style="color: #555; font-size: 12px; margin-top: 10px;">Use placeholders like %email%, %name% in the content. These will be replaced with the recipient\'s email and name when the email is sent.</p>');
+					}
+				});
+			</script>
+			<?php
+		}
+	});
 }
 
 function emaily_get_contact_lists() {
@@ -122,6 +137,20 @@ function emaily_get_contact_lists() {
 		$options[$list->ID] = $list->post_title;
 	}
 	return $options;
+}
+
+// Replace placeholders in campaign content
+function emaily_replace_placeholders($content, $recipient_data) {
+	$placeholders = [
+		'%email%' => isset($recipient_data['email']) ? sanitize_email($recipient_data['email']) : '',
+		'%name%'  => isset($recipient_data['name']) ? sanitize_text_field($recipient_data['name']) : '',
+	];
+
+	return str_replace(
+		array_keys($placeholders),
+		array_values($placeholders),
+		$content
+	);
 }
 
 // Validate campaign meta on save
@@ -200,25 +229,23 @@ function emaily_save_campaign_settings($post_id) {
 			$recipients = array_merge($recipients, $list_users);
 		}
 	}
-	$recipients = array_unique($recipients);
+	$recipients = array_unique($recipients, SORT_REGULAR);
 	update_post_meta($post_id, 'emaily_campaign_recipients', $recipients);
 	emaily_log($post_id, "Updated recipients: " . count($recipients) . " emails.");
 
 	// Save schedule
 	$schedule_datetime = carbon_get_post_meta($post_id, 'emaily_campaign_schedule');
-
 	$post_status = get_post_status($post_id);
 	if ($schedule_datetime && $post_status === 'publish') {
-		$datetime = new DateTime($schedule_datetime, new DateTimeZone(wp_timezone_string()));
-		$timestamp = $datetime->getTimestamp();
-		if ( strtotime($schedule_datetime) > current_time('timestamp')) {
-			$scheduled_campaigns[$post_id] = $timestamp;
+		$scheduled_time = strtotime($schedule_datetime);
+		if ($scheduled_time !== false && $scheduled_time > current_time('timestamp')) {
+			$scheduled_campaigns[$post_id] = $scheduled_time;
 			update_post_meta($post_id, 'emaily_campaign_status', 'scheduled');
 			emaily_log($post_id, "Campaign scheduled for $schedule_datetime.");
 		} else {
 			unset($scheduled_campaigns[$post_id]);
 			update_post_meta($post_id, 'emaily_campaign_status', 'draft');
-			emaily_log($post_id, "Campaign schedule in the past, not scheduled.");
+			emaily_log($post_id, "Campaign schedule invalid or in the past, not scheduled.");
 		}
 	} else {
 		unset($scheduled_campaigns[$post_id]);
@@ -232,7 +259,6 @@ function emaily_save_campaign_settings($post_id) {
 	} else {
 		update_option('emaily_scheduled_campaigns', $scheduled_campaigns);
 	}
-	emaily_log($post_id, "All the schedules ." . json_encode($scheduled_campaigns));
 }
 add_action('save_post_emaily_campaign', 'emaily_save_campaign_settings');
 
@@ -255,10 +281,9 @@ function emaily_handle_campaign_status($new_status, $old_status, $post) {
 		// Add to schedule if newly published
 		$schedule_datetime = carbon_get_post_meta($post->ID, 'emaily_campaign_schedule');
 		if ($schedule_datetime) {
-			$datetime = new DateTime($schedule_datetime, new DateTimeZone(wp_timezone_string()));
-			$timestamp = $datetime->getTimestamp();
-			if ($timestamp > current_time('timestamp')) {
-				$scheduled_campaigns[$post->ID] = $timestamp;
+			$scheduled_time = strtotime($schedule_datetime);
+			if ($scheduled_time !== false && $scheduled_time > current_time('timestamp')) {
+				$scheduled_campaigns[$post->ID] = $scheduled_time;
 				update_post_meta($post->ID, 'emaily_campaign_status', 'scheduled');
 				emaily_log($post->ID, "Campaign published, scheduled for $schedule_datetime.");
 			}

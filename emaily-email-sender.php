@@ -4,7 +4,7 @@ if (!defined('ABSPATH')) {
 	exit;
 }
 
-// Log function (assumed to exist in plugin)
+// Log function
 if (!function_exists('emaily_log')) {
 	function emaily_log($campaign_id, $message) {
 		$log_dir = plugin_dir_path(__FILE__) . 'logs/';
@@ -52,7 +52,8 @@ function emaily_send_campaign($campaign_id) {
 			delete_transient($lock_key);
 			return;
 		}
-		$email_queue = $recipients;
+		// Convert recipients to queue format (preserve associative data)
+		$email_queue = array_values($recipients); // Ensure indexed array for queue
 		update_post_meta($campaign_id, 'emaily_campaign_email_queue', $email_queue);
 	}
 
@@ -68,6 +69,7 @@ function emaily_send_campaign($campaign_id) {
 
 	// Get email content
 	$subject = $post->post_title;
+	$preheader = carbon_get_post_meta($campaign_id, 'emaily_preheader');
 	$content = apply_filters('the_content', $post->post_content); // Process Gutenberg content
 	$headers = array('Content-Type: text/html; charset=UTF-8');
 
@@ -75,11 +77,23 @@ function emaily_send_campaign($campaign_id) {
 	$max_retries = 3;
 
 	// Send emails
-	foreach ($emails_to_send as $email) {
-		if (!is_email($email)) {
-			emaily_log($campaign_id, "Invalid email skipped: $email");
+	foreach ($emails_to_send as $recipient_data) {
+		if (!isset($recipient_data['email']) || !is_email($recipient_data['email'])) {
+			emaily_log($campaign_id, "Invalid email skipped: " . print_r($recipient_data, true));
 			continue;
 		}
+
+		$email = $recipient_data['email'];
+
+		// Replace placeholders in content
+		$personalized_content = emaily_replace_placeholders($content, $recipient_data);
+
+		// Combine preheader and content
+		$email_content = '';
+		if ($preheader) {
+			$email_content .= '<p style="color: #666; font-size: 12px; margin-bottom: 10px;">' . esc_html($preheader) . '</p>';
+		}
+		$email_content .= $personalized_content;
 
 		// Generate tracking pixel
 		$token = wp_hash("emaily_track_{$campaign_id}_{$email}", 'emaily_track');
@@ -92,7 +106,7 @@ function emaily_send_campaign($campaign_id) {
 		$tracking_pixel = '<img src="' . esc_url($tracking_url) . '" width="1" height="1" alt="" />';
 
 		// Append tracking pixel to content
-		$email_content = $content . $tracking_pixel;
+		$email_content .= $tracking_pixel;
 
 		$retry_count = isset($failed_emails[$email]) ? $failed_emails[$email] : 0;
 		$result = wp_mail($email, $subject, $email_content, $headers);
@@ -120,7 +134,7 @@ function emaily_send_campaign($campaign_id) {
 	update_post_meta($campaign_id, 'emaily_campaign_failed_emails', $failed_emails);
 
 	// Update queue
-	$remaining_emails = array_diff($email_queue, $emails_to_send);
+	$remaining_emails = array_diff_key($email_queue, array_fill_keys(array_keys($emails_to_send), null));
 	if (empty($remaining_emails)) {
 		// All emails sent
 		update_post_meta($campaign_id, 'emaily_campaign_all_emails_sent', true);
@@ -129,7 +143,7 @@ function emaily_send_campaign($campaign_id) {
 		emaily_log($campaign_id, "All emails sent for campaign.");
 	} else {
 		// Update queue with remaining emails
-		update_post_meta($campaign_id, 'emaily_campaign_email_queue', $remaining_emails);
+		update_post_meta($campaign_id, 'emaily_campaign_email_queue', array_values($remaining_emails));
 		emaily_log($campaign_id, "Processed " . count($emails_to_send) . " emails, " . count($remaining_emails) . " remaining.");
 	}
 
