@@ -67,38 +67,28 @@ add_filter('cron_schedules', 'emaily_add_schedules');
 // Check and trigger campaigns
 function emaily_check_campaigns() {
 	$current_time = current_time('timestamp');
-	$args = array(
-		'post_type'      => 'emaily_campaign',
-		'post_status'    => 'publish',
-		'posts_per_page' => -1,
-		'meta_query'     => array(
-			'relation' => 'AND',
-			array(
-				'key'     => 'emaily_campaign_scheduled',
-				'value'   => '1',
-				'compare' => '=',
-			),
-			array(
-				'key'     => '_emaily_campaign_schedule', // Carbon Fields prepends underscore
-				'compare' => 'EXISTS',
-			),
-		),
-	);
+	$scheduled_campaigns = get_option('emaily_scheduled_campaigns', array());
 
-	$campaigns = get_posts($args);
-	foreach ($campaigns as $campaign) {
-		$schedule_datetime = carbon_get_post_meta($campaign->ID, 'emaily_campaign_schedule');
-		if (!$schedule_datetime) {
-			continue;
-		}
-		$datetime = new DateTime($schedule_datetime, new DateTimeZone(wp_timezone_string()));
-		$timestamp = $datetime->getTimestamp();
-
+	foreach ($scheduled_campaigns as $campaign_id => $timestamp) {
 		if ($timestamp <= $current_time) {
-			emaily_log($campaign->ID, "Campaign scheduled time reached, triggering email sending.");
-			do_action('emaily_send_campaign', $campaign->ID);
-			update_post_meta($campaign->ID, 'emaily_campaign_scheduled', '0');
+			// Verify campaign exists and is published
+			$post = get_post($campaign_id);
+			if ($post && $post->post_type === 'emaily_campaign' && $post->post_status === 'publish') {
+				emaily_log($campaign_id, "Campaign scheduled time reached, triggering email sending.");
+				do_action('emaily_send_campaign', $campaign_id);
+			} else {
+				emaily_log($campaign_id, "Campaign not found or unpublished, removing from schedule.");
+			}
+			// Remove from schedule
+			unset($scheduled_campaigns[$campaign_id]);
 		}
+	}
+
+	// Update option with remaining schedules
+	if (empty($scheduled_campaigns)) {
+		delete_option('emaily_scheduled_campaigns');
+	} else {
+		update_option('emaily_scheduled_campaigns', $scheduled_campaigns);
 	}
 }
 add_action('emaily_check_campaigns', 'emaily_check_campaigns');
@@ -134,11 +124,14 @@ function emaily_get_contact_lists() {
 	return $options;
 }
 
-// Save campaign settings
+// Save campaign settings and manage schedules
 function emaily_save_campaign_settings($post_id) {
 	if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) {
 		return;
 	}
+
+	// Get current schedules
+	$scheduled_campaigns = get_option('emaily_scheduled_campaigns', array());
 
 	// Save recipients from selected contact lists
 	$lists = carbon_get_post_meta($post_id, 'emaily_campaign_lists');
@@ -154,34 +147,90 @@ function emaily_save_campaign_settings($post_id) {
 	update_post_meta($post_id, 'emaily_campaign_recipients', $recipients);
 	emaily_log($post_id, "Updated recipients: " . count($recipients) . " emails.");
 
-	// Save schedule status
+	// Save schedule
 	$schedule_datetime = carbon_get_post_meta($post_id, 'emaily_campaign_schedule');
-	if ($schedule_datetime) {
+	$post_status = get_post_status($post_id);
+	if ($schedule_datetime && $post_status === 'publish') {
 		$datetime = new DateTime($schedule_datetime, new DateTimeZone(wp_timezone_string()));
 		$timestamp = $datetime->getTimestamp();
 		if ($timestamp > current_time('timestamp')) {
-			update_post_meta($post_id, 'emaily_campaign_scheduled', '1');
+			$scheduled_campaigns[$post_id] = $timestamp;
 			update_post_meta($post_id, 'emaily_campaign_status', 'scheduled');
 			emaily_log($post_id, "Campaign scheduled for $schedule_datetime.");
 		} else {
-			update_post_meta($post_id, 'emaily_campaign_scheduled', '0');
+			unset($scheduled_campaigns[$post_id]);
 			update_post_meta($post_id, 'emaily_campaign_status', 'draft');
 			emaily_log($post_id, "Campaign schedule in the past, not scheduled.");
 		}
 	} else {
-		update_post_meta($post_id, 'emaily_campaign_scheduled', '0');
+		unset($scheduled_campaigns[$post_id]);
 		update_post_meta($post_id, 'emaily_campaign_status', 'draft');
-		emaily_log($post_id, "Campaign schedule cleared.");
+		emaily_log($post_id, "Campaign schedule cleared or not published.");
+	}
+
+	// Update or delete option
+	if (empty($scheduled_campaigns)) {
+		delete_option('emaily_scheduled_campaigns');
+	} else {
+		update_option('emaily_scheduled_campaigns', $scheduled_campaigns);
 	}
 }
 add_action('save_post_emaily_campaign', 'emaily_save_campaign_settings');
+
+// Handle campaign status changes (publish, unpublish, etc.)
+function emaily_handle_campaign_status($new_status, $old_status, $post) {
+	if ($post->post_type !== 'emaily_campaign') {
+		return;
+	}
+
+	$scheduled_campaigns = get_option('emaily_scheduled_campaigns', array());
+
+	if ($new_status !== 'publish') {
+		// Remove from schedule if unpublished
+		if (isset($scheduled_campaigns[$post->ID])) {
+			unset($scheduled_campaigns[$post->ID]);
+			update_post_meta($post->ID, 'emaily_campaign_status', 'draft');
+			emaily_log($post->ID, "Campaign unpublished, removed from schedule.");
+		}
+	} elseif ($new_status === 'publish' && $old_status !== 'publish') {
+		// Add to schedule if newly published
+		$schedule_datetime = carbon_get_post_meta($post->ID, 'emaily_campaign_schedule');
+		if ($schedule_datetime) {
+			$datetime = new DateTime($schedule_datetime, new DateTimeZone(wp_timezone_string()));
+			$timestamp = $datetime->getTimestamp();
+			if ($timestamp > current_time('timestamp')) {
+				$scheduled_campaigns[$post->ID] = $timestamp;
+				update_post_meta($post->ID, 'emaily_campaign_status', 'scheduled');
+				emaily_log($post->ID, "Campaign published, scheduled for $schedule_datetime.");
+			}
+		}
+	}
+
+	// Update or delete option
+	if (empty($scheduled_campaigns)) {
+		delete_option('emaily_scheduled_campaigns');
+	} else {
+		update_option('emaily_scheduled_campaigns', $scheduled_campaigns);
+	}
+}
+add_action('transition_post_status', 'emaily_handle_campaign_status', 10, 3);
 
 // Unschedule on campaign deletion
 function emaily_unschedule_campaign($post_id) {
 	if (get_post_type($post_id) !== 'emaily_campaign') {
 		return;
 	}
-	update_post_meta($post_id, 'emaily_campaign_scheduled', '0');
+
+	$scheduled_campaigns = get_option('emaily_scheduled_campaigns', array());
+	if (isset($scheduled_campaigns[$post_id])) {
+		unset($scheduled_campaigns[$post_id]);
+		if (empty($scheduled_campaigns)) {
+			delete_option('emaily_scheduled_campaigns');
+		} else {
+			update_option('emaily_scheduled_campaigns', $scheduled_campaigns);
+		}
+	}
+
 	update_post_meta($post_id, 'emaily_campaign_status', 'canceled');
 	emaily_log($post_id, "Campaign deleted, unscheduled.");
 }
@@ -197,7 +246,6 @@ function emaily_validate_campaign($data, $postarr) {
 		return $data;
 	}
 
-	// Get Carbon Fields data from the post meta (since $postarr won't have it directly)
 	$post_id = isset($postarr['ID']) ? $postarr['ID'] : null;
 	$lists = $post_id ? carbon_get_post_meta($post_id, 'emaily_campaign_lists') : array();
 	$lists = is_array($lists) ? array_map('intval', $lists) : array();
@@ -233,7 +281,7 @@ function emaily_validate_campaign($data, $postarr) {
 }
 add_filter('wp_insert_post_data', 'emaily_validate_campaign', 10, 2);
 
-// Log function (assumed to exist, duplicated here for consistency)
+// Log function
 if (!function_exists('emaily_log')) {
 	function emaily_log($campaign_id, $message) {
 		$log_dir = plugin_dir_path(__FILE__) . 'logs/';
