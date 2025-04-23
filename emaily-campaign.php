@@ -124,6 +124,63 @@ function emaily_get_contact_lists() {
 	return $options;
 }
 
+// Validate campaign meta on save
+add_action('carbon_fields_post_meta_container_save', 'validate_emaily_campaign_schedule', 10, 2);
+function validate_emaily_campaign_schedule($post_id, $container) {
+	if (get_post_type($post_id) !== 'emaily_campaign') {
+		return;
+	}
+
+	// Only validate for published posts
+	$post_status = get_post_status($post_id);
+	if ($post_status !== 'publish') {
+		return;
+	}
+
+	// Validate contact lists
+	$lists = carbon_get_post_meta($post_id, 'emaily_campaign_lists');
+	$lists = is_array($lists) ? array_map('intval', $lists) : [];
+	if (empty($lists)) {
+		wp_die(
+			__('Error: At least one contact list must be selected.', 'emaily'),
+			__('Campaign Validation Error', 'emaily'),
+			array('back_link' => true)
+		);
+	}
+
+	// Validate schedule
+	$schedule = carbon_get_post_meta($post_id, 'emaily_campaign_schedule');
+	if (empty($schedule)) {
+		wp_die(
+			__('Error: Schedule date and time must be set.', 'emaily'),
+			__('Campaign Validation Error', 'emaily'),
+			array('back_link' => true)
+		);
+	}
+
+	try {
+		$scheduled_time = strtotime($schedule);
+		$now = current_time('timestamp'); // WordPress local time
+		if ($scheduled_time === false || $scheduled_time <= $now) {
+			// Remove invalid schedule
+			carbon_delete_post_meta($post_id, 'emaily_campaign_schedule');
+			wp_die(
+				__('Error: Campaign schedule must be set to a future date and time.', 'emaily'),
+				__('Campaign Validation Error', 'emaily'),
+				array('back_link' => true)
+			);
+		}
+	} catch (Exception $e) {
+		// Remove invalid schedule
+		carbon_delete_post_meta($post_id, 'emaily_campaign_schedule');
+		wp_die(
+			__('Error: Invalid schedule date and time format.', 'emaily'),
+			__('Campaign Validation Error', 'emaily'),
+			array('back_link' => true)
+		);
+	}
+}
+
 // Save campaign settings and manage schedules
 function emaily_save_campaign_settings($post_id) {
 	if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) {
@@ -149,11 +206,12 @@ function emaily_save_campaign_settings($post_id) {
 
 	// Save schedule
 	$schedule_datetime = carbon_get_post_meta($post_id, 'emaily_campaign_schedule');
+
 	$post_status = get_post_status($post_id);
 	if ($schedule_datetime && $post_status === 'publish') {
 		$datetime = new DateTime($schedule_datetime, new DateTimeZone(wp_timezone_string()));
 		$timestamp = $datetime->getTimestamp();
-		if ($timestamp > current_time('timestamp')) {
+		if ( strtotime($schedule_datetime) > current_time('timestamp')) {
 			$scheduled_campaigns[$post_id] = $timestamp;
 			update_post_meta($post_id, 'emaily_campaign_status', 'scheduled');
 			emaily_log($post_id, "Campaign scheduled for $schedule_datetime.");
@@ -174,6 +232,7 @@ function emaily_save_campaign_settings($post_id) {
 	} else {
 		update_option('emaily_scheduled_campaigns', $scheduled_campaigns);
 	}
+	emaily_log($post_id, "All the schedules ." . json_encode($scheduled_campaigns));
 }
 add_action('save_post_emaily_campaign', 'emaily_save_campaign_settings');
 
@@ -235,51 +294,6 @@ function emaily_unschedule_campaign($post_id) {
 	emaily_log($post_id, "Campaign deleted, unscheduled.");
 }
 add_action('before_delete_post', 'emaily_unschedule_campaign');
-
-// Validate campaign before publishing
-function emaily_validate_campaign($data, $postarr) {
-	if ($data['post_type'] !== 'emaily_campaign') {
-		return $data;
-	}
-
-	if (in_array($data['post_status'], array('draft', 'auto-draft', 'pending'))) {
-		return $data;
-	}
-
-	$post_id = isset($postarr['ID']) ? $postarr['ID'] : null;
-	$lists = $post_id ? carbon_get_post_meta($post_id, 'emaily_campaign_lists') : array();
-	$lists = is_array($lists) ? array_map('intval', $lists) : array();
-
-	if (empty($lists)) {
-		wp_die(
-			__('Error: At least one contact list must be selected.', 'emaily'),
-			__('Campaign Validation Error', 'emaily'),
-			array('back_link' => true)
-		);
-	}
-
-	$schedule_datetime = $post_id ? carbon_get_post_meta($post_id, 'emaily_campaign_schedule') : '';
-	if (empty($schedule_datetime)) {
-		wp_die(
-			__('Error: Schedule date and time must be set.', 'emaily'),
-			__('Campaign Validation Error', 'emaily'),
-			array('back_link' => true)
-		);
-	}
-
-	$datetime = new DateTime($schedule_datetime, new DateTimeZone(wp_timezone_string()));
-	$timestamp = $datetime->getTimestamp();
-	if ($timestamp <= current_time('timestamp')) {
-		wp_die(
-			__('Error: Schedule must be set in the future.', 'emaily'),
-			__('Campaign Validation Error', 'emaily'),
-			array('back_link' => true)
-		);
-	}
-
-	return $data;
-}
-add_filter('wp_insert_post_data', 'emaily_validate_campaign', 10, 2);
 
 // Log function
 if (!function_exists('emaily_log')) {
