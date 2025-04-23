@@ -13,8 +13,10 @@ function emaily_available_form_fields() {
 
 function emaily_get_user_info ( $user, $fieldname ) {
 	switch ( $fieldname ) {
-		case 'Email':
+		case 'email':
 			return $user->user_email;
+		case 'name':
+			return $user->display_name;
 		default:
 			return get_user_meta( $user->ID, 'emaily_'.$fieldname, true );
 	}

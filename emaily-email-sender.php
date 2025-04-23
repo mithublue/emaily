@@ -23,10 +23,10 @@ function emaily_send_campaign($campaign_id) {
 	// Check global lock to prevent concurrent sending
 	$lock_key = 'emaily_email_sending_lock';
 	$lock_duration = 300; // 5 minutes
-	/*if (get_transient($lock_key)) {
+	if (get_transient($lock_key)) {
 		emaily_log($campaign_id, "Skipped sending: Another campaign is processing.");
 		return;
-	}*/
+	}
 
 	// Set lock
 	set_transient($lock_key, true, $lock_duration);
