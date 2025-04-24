@@ -25,9 +25,9 @@ require_once __DIR__ . '/emaily-form.php';
 require_once __DIR__ . '/shortcode.php';
 require_once __DIR__ . '/emaily-settings.php';
 require_once __DIR__ . '/helper.php';
+require_once __DIR__ . '/contact-list.php';
 
-// Register the custom post type 'email_contact_list'
-function emaily_register_post_type() {
+/*function emaily_register_contact_list_post_type() {
 	$labels = array(
 		'name'               => __('Email Contact Lists', 'emaily'),
 		'singular_name'      => __('Email Contact List', 'emaily'),
@@ -59,7 +59,7 @@ function emaily_register_post_type() {
 
 	register_post_type('email_contact_list', $args);
 }
-add_action('init', 'emaily_register_post_type');
+add_action('init', 'emaily_register_contact_list_post_type');*/
 
 // Add the Emaily admin menu
 function emaily_admin_menu() {

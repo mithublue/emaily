@@ -392,6 +392,8 @@ function emaily_save_campaign_settings($post_id) {
 	$post_status = get_post_status($post_id);
 	if ($schedule_datetime && $post_status === 'publish') {
 		$scheduled_time = strtotime($schedule_datetime);
+		logger('$scheduled_time',$scheduled_time);
+		logger('$timestamp',current_time('timestamp'));
 		if ($scheduled_time !== false && $scheduled_time > current_time('timestamp')) {
 			$scheduled_campaigns[$post_id] = $scheduled_time;
 			update_post_meta($post_id, 'emaily_campaign_status', 'scheduled');
@@ -414,7 +416,7 @@ function emaily_save_campaign_settings($post_id) {
 		update_option('emaily_scheduled_campaigns', $scheduled_campaigns);
 	}
 }
-add_action('save_post_emaily_campaign', 'emaily_save_campaign_settings');
+add_action('save_post_emaily_campaign', 'emaily_save_campaign_settings', 999999);
 
 // Handle campaign status changes (publish, unpublish, etc.)
 function emaily_handle_campaign_status($new_status, $old_status, $post) {
@@ -451,7 +453,7 @@ function emaily_handle_campaign_status($new_status, $old_status, $post) {
 		update_option('emaily_scheduled_campaigns', $scheduled_campaigns);
 	}
 }
-add_action('transition_post_status', 'emaily_handle_campaign_status', 10, 3);
+add_action('transition_post_status', 'emaily_handle_campaign_status', 9999999, 3);
 
 // Unschedule on campaign deletion
 function emaily_unschedule_campaign($post_id) {
