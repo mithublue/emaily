@@ -165,6 +165,32 @@ function emaily_test_email_metabox_callback($post) {
 	<?php
 }
 
+// Add Update Recipients metabox
+add_action('add_meta_boxes', 'emaily_add_update_recipients_metabox');
+function emaily_add_update_recipients_metabox() {
+	add_meta_box(
+		'emaily_update_recipients',
+		__('Update Recipients', 'emaily'),
+		'emaily_update_recipients_metabox_callback',
+		'emaily_campaign',
+		'side',
+		'high'
+	);
+}
+
+function emaily_update_recipients_metabox_callback($post) {
+	?>
+	<p>
+		<button type="button" id="emaily-update-recipients-button" class="button button-secondary">
+			<?php _e('Update Recipients', 'emaily'); ?>
+		</button>
+	</p>
+	<p class="description">
+		<?php _e('Click to update the recipient list from selected contact lists.', 'emaily'); ?>
+	</p>
+	<?php
+}
+
 // Enqueue JavaScript for Test Email
 add_action('admin_enqueue_scripts', 'emaily_enqueue_test_email_scripts');
 function emaily_enqueue_test_email_scripts($hook) {
@@ -192,6 +218,36 @@ function emaily_enqueue_test_email_scripts($hook) {
 				'required'       => __('Email address is required.', 'emaily'),
 				'error_prefix'   => __('Error: ', 'emaily'),
 				'error_generic'  => __('An error occurred while sending the test email.', 'emaily'),
+			],
+		]
+	);
+}
+
+// Enqueue JavaScript for Update Recipients
+add_action('admin_enqueue_scripts', 'emaily_enqueue_update_recipients_scripts');
+function emaily_enqueue_update_recipients_scripts($hook) {
+	if (get_current_screen()->post_type !== 'emaily_campaign' || !in_array($hook, ['post.php', 'post-new.php'])) {
+		return;
+	}
+
+	wp_enqueue_script(
+		'emaily-update-recipients',
+		plugin_dir_url(__FILE__) . 'js/emaily-update-recipients.js',
+		['jquery'],
+		'1.0',
+		true
+	);
+
+	wp_localize_script(
+		'emaily-update-recipients',
+		'emailyUpdateRecipients',
+		[
+			'ajax_url' => admin_url('admin-ajax.php'),
+			'nonce'    => wp_create_nonce('emaily_update_recipients_nonce'),
+			'post_id'  => get_the_ID(),
+			'strings'  => [
+				'confirm'        => __('Are you sure you want to update the recipient list? This will overwrite the existing recipients.', 'emaily'),
+				'error_generic'  => __('An error occurred while updating the recipient list.', 'emaily'),
 			],
 		]
 	);
@@ -241,7 +297,7 @@ function emaily_send_test_email() {
 	// Replace placeholders
 	$user = get_user_by('email', $test_email);
 	$placeholders = emaily_generate_placeholders();
-	$personalized_content = emaily_replace_placeholders($content, $user, $placeholders);
+	$personalized_content = emaily_replace_placeholders($content, $test_email, $placeholders);
 
 	// Combine preheader and content
 	$email_content = '';
@@ -273,6 +329,56 @@ function emaily_send_test_email() {
 		emaily_log($post_id, "Failed to send test email to $test_email");
 		wp_send_json_error(__('Failed to send test email.', 'emaily'));
 	}
+}
+
+// AJAX handler for updating recipients
+add_action('wp_ajax_emaily_update_recipients', 'emaily_update_recipients');
+function emaily_update_recipients() {
+	check_ajax_referer('emaily_update_recipients_nonce', 'nonce');
+
+	$post_id = isset($_POST['post_id']) ? intval($_POST['post_id']) : 0;
+
+	if (!$post_id || get_post_type($post_id) !== 'emaily_campaign') {
+		wp_send_json_error(__('Invalid campaign.', 'emaily'));
+	}
+
+	$post = get_post($post_id);
+	if (!$post) {
+		wp_send_json_error(__('Campaign not found.', 'emaily'));
+	}
+
+	// Get selected contact lists
+	$lists = carbon_get_post_meta($post_id, 'emaily_campaign_lists');
+	$lists = is_array($lists) ? array_map('intval', $lists) : [];
+
+	$recipients = [];
+	foreach ($lists as $list_id) {
+		$list_emails = get_post_meta($list_id, 'email_contact_list_users', true);
+		if (is_array($list_emails)) {
+			$recipients = array_merge($recipients, $list_emails);
+		}
+	}
+
+	// Ensure unique numeric array
+	$recipients = array_values(array_unique($recipients));
+	$recipient_count = count($recipients);
+
+	// Update recipients meta
+	update_post_meta($post_id, 'emaily_campaign_recipients', $recipients);
+	emaily_log($post_id, "Recipient list updated: $recipient_count emails.");
+
+	wp_send_json_success([
+		'message' => sprintf(
+			_n(
+				'Recipient list updated: %d email.',
+				'Recipient list updated: %d emails.',
+				$recipient_count,
+				'emaily'
+			),
+			$recipient_count
+		),
+		'count' => $recipient_count,
+	]);
 }
 
 function emaily_get_contact_lists() {
@@ -392,8 +498,6 @@ function emaily_save_campaign_settings($post_id) {
 	$post_status = get_post_status($post_id);
 	if ($schedule_datetime && $post_status === 'publish') {
 		$scheduled_time = strtotime($schedule_datetime);
-		logger('$scheduled_time',$scheduled_time);
-		logger('$timestamp',current_time('timestamp'));
 		if ($scheduled_time !== false && $scheduled_time > current_time('timestamp')) {
 			$scheduled_campaigns[$post_id] = $scheduled_time;
 			update_post_meta($post_id, 'emaily_campaign_status', 'scheduled');
