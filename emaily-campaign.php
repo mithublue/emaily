@@ -79,7 +79,6 @@ function emaily_check_campaigns() {
 			} else {
 				emaily_log($campaign_id, "Campaign not found or unpublished, removing from schedule.");
 			}
-			exit;
 			// Remove from schedule
 			unset($scheduled_campaigns[$campaign_id]);
 		}
@@ -175,7 +174,7 @@ function emaily_enqueue_test_email_scripts($hook) {
 
 	wp_enqueue_script(
 		'emaily-test-email',
-		plugin_dir_url(__FILE__) . 'js/emaily-test-email.js',
+		plugin_dir_url(__FILE__) . '/assets/js/emaily-test-email.js',
 		['jquery'],
 		'1.0',
 		true
@@ -242,7 +241,7 @@ function emaily_send_test_email() {
 	// Replace placeholders
 	$user = get_user_by('email', $test_email);
 	$placeholders = emaily_generate_placeholders();
-	$personalized_content = emaily_replace_placeholders($content, $test_email, $placeholders);
+	$personalized_content = emaily_replace_placeholders($content, $user, $placeholders);
 
 	// Combine preheader and content
 	$email_content = '';
