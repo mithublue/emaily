@@ -80,14 +80,32 @@ function emaily_send_campaign($campaign_id) {
 	$placeholders = emaily_generate_placeholders();
 
 	// Send emails
-	foreach ($emails_to_send as $email) {
+	foreach ($emails_to_send as $e => $email) {
 		if (!is_email($email)) {
+
+			//invalid emails are removed from queue
+			unset( $emails_to_send[$e] );
+
+			//remove item by value from $email_queue
+			$email_queue = array_diff($email_queue, array($email));
+
 			emaily_log($campaign_id, "Invalid email skipped: $email");
 			continue;
 		}
 
 		// Replace placeholders in content
-		$personalized_content = emaily_replace_placeholders($content, $email, $placeholders);
+		$user = get_user_by('email', $email);
+
+		//delete user, if doesn't exit
+		if (!$user) {
+			emaily_log($campaign_id, "User not found for email: $email");
+			unset( $emails_to_send[$e] );
+			//remove item by value from $email_queue
+			$email_queue = array_diff($email_queue, array($email));
+			continue;
+		}
+
+		$personalized_content = emaily_replace_placeholders($content, $user, $placeholders);
 
 		// Combine preheader and content
 		$email_content = '';
@@ -136,6 +154,9 @@ function emaily_send_campaign($campaign_id) {
 
 	// Update queue
 	$remaining_emails = array_diff($email_queue, $emails_to_send);
+
+	update_post_meta($campaign_id, 'emaily_campaign_recipients', array_values($remaining_emails));
+
 	if (empty($remaining_emails)) {
 		// All emails sent
 		update_post_meta($campaign_id, 'emaily_campaign_all_emails_sent', true);

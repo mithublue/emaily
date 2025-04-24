@@ -141,10 +141,8 @@ function emaily_get_contact_lists() {
 }
 
 // Replace placeholders in campaign content
-function emaily_replace_placeholders($content, $email, $placeholders ) {
+function emaily_replace_placeholders($content, $user, $placeholders ) {
 
-	//get user by email
-	$user = get_user_by('email', $email);
 
 	$replacables = [];
 	foreach ( $placeholders as $placeholder ) {
