@@ -108,6 +108,20 @@ function emaily_campaign_fields() {
 		                        \Carbon_Fields\Field::make('date_time', 'emaily_campaign_schedule', __('Schedule Date & Time', 'emaily'))
 		                                            ->set_storage_format('Y-m-d H:i:s')
 		                                            ->set_help_text(__('Set the date and time to schedule the campaign (e.g., 2025-04-23 10:00:00). The campaign will be scheduled automatically when published.', 'emaily')),
+		                        \Carbon_Fields\Field::make('text', 'emaily_sender_email', __('Sender Email', 'emaily'))
+		                                            ->set_attribute('type', 'email')
+		                                            ->set_default_value(get_option('admin_email'))
+		                                            ->set_help_text(__('The email address from which the campaign will be sent.', 'emaily'))
+		                                            ->set_required(true),
+		                        \Carbon_Fields\Field::make('text', 'emaily_sender_name', __('Sender Name', 'emaily'))
+		                                            ->set_default_value(get_bloginfo('name'))
+		                                            ->set_help_text(__('The name displayed as the sender of the campaign.', 'emaily'))
+		                                            ->set_required(true),
+		                        \Carbon_Fields\Field::make('text', 'emaily_reply_to', __('Reply-To Email', 'emaily'))
+		                                            ->set_attribute('type', 'email')
+		                                            ->set_default_value(get_option('admin_email'))
+		                                            ->set_help_text(__('The email address to which replies will be sent.', 'emaily'))
+		                                            ->set_required(true),
 	                        ));
 
 	// Add help text for placeholders in the editor
@@ -126,6 +140,142 @@ function emaily_campaign_fields() {
 	});
 }
 
+// Add Test Email metabox
+add_action('add_meta_boxes', 'emaily_add_test_email_metabox');
+function emaily_add_test_email_metabox() {
+	add_meta_box(
+		'emaily_test_email',
+		__('Test Email', 'emaily'),
+		'emaily_test_email_metabox_callback',
+		'emaily_campaign',
+		'side',
+		'high'
+	);
+}
+
+function emaily_test_email_metabox_callback($post) {
+	?>
+	<p>
+		<button type="button" id="emaily-test-email-button" class="button button-secondary">
+			<?php _e('Send Test Email', 'emaily'); ?>
+		</button>
+	</p>
+	<p class="description">
+		<?php _e('Click to send a test email to verify the campaign.', 'emaily'); ?>
+	</p>
+	<?php
+}
+
+// Enqueue JavaScript for Test Email
+add_action('admin_enqueue_scripts', 'emaily_enqueue_test_email_scripts');
+function emaily_enqueue_test_email_scripts($hook) {
+	if (get_current_screen()->post_type !== 'emaily_campaign' || !in_array($hook, ['post.php', 'post-new.php'])) {
+		return;
+	}
+
+	wp_enqueue_script(
+		'emaily-test-email',
+		plugin_dir_url(__FILE__) . 'js/emaily-test-email.js',
+		['jquery'],
+		'1.0',
+		true
+	);
+
+	wp_localize_script(
+		'emaily-test-email',
+		'emailyTestEmail',
+		[
+			'ajax_url' => admin_url('admin-ajax.php'),
+			'nonce'    => wp_create_nonce('emaily_test_email_nonce'),
+			'post_id'  => get_the_ID(),
+			'strings'  => [
+				'prompt'         => __('Enter the email address to send the test email to:', 'emaily'),
+				'required'       => __('Email address is required.', 'emaily'),
+				'error_prefix'   => __('Error: ', 'emaily'),
+				'error_generic'  => __('An error occurred while sending the test email.', 'emaily'),
+			],
+		]
+	);
+}
+
+// AJAX handler for sending test email
+add_action('wp_ajax_emaily_send_test_email', 'emaily_send_test_email');
+function emaily_send_test_email() {
+	check_ajax_referer('emaily_test_email_nonce', 'nonce');
+
+	$post_id = isset($_POST['post_id']) ? intval($_POST['post_id']) : 0;
+	$test_email = isset($_POST['test_email']) ? sanitize_email($_POST['test_email']) : '';
+
+	if (!$post_id || get_post_type($post_id) !== 'emaily_campaign') {
+		wp_send_json_error(__('Invalid campaign.', 'emaily'));
+	}
+
+	if (!is_email($test_email)) {
+		wp_send_json_error(__('Please enter a valid email address.', 'emaily'));
+	}
+
+	$post = get_post($post_id);
+	if (!$post) {
+		wp_send_json_error(__('Campaign not found.', 'emaily'));
+	}
+
+	// Prepare email
+	$subject = $post->post_title;
+	$preheader = carbon_get_post_meta($post_id, 'emaily_preheader');
+	$content = apply_filters('the_content', $post->post_content);
+
+	// Prepare headers
+	$from_email = carbon_get_post_meta($post_id, 'emaily_sender_email');
+	$from_name = carbon_get_post_meta($post_id, 'emaily_sender_name');
+	$reply_to = carbon_get_post_meta($post_id, 'emaily_reply_to');
+
+	$from_email = is_email($from_email) ? sanitize_email($from_email) : sanitize_email(get_option('admin_email'));
+	$from_name = !empty($from_name) ? sanitize_text_field($from_name) : sanitize_text_field(get_bloginfo('name'));
+	$reply_to = is_email($reply_to) ? sanitize_email($reply_to) : sanitize_email(get_option('admin_email'));
+
+	$headers = array(
+		'Content-Type: text/html; charset=UTF-8',
+		"From: {$from_name} <{$from_email}>",
+		"Reply-To: {$reply_to}",
+	);
+
+	// Replace placeholders
+	$user = get_user_by('email', $test_email);
+	$placeholders = emaily_generate_placeholders();
+	$personalized_content = emaily_replace_placeholders($content, $test_email, $placeholders);
+
+	// Combine preheader and content
+	$email_content = '';
+	if ($preheader) {
+		$email_content .= '<p style="color: #666; font-size: 12px; margin-bottom: 10px;">' . esc_html($preheader) . '</p>';
+	}
+	$email_content .= $personalized_content;
+
+	// Generate tracking pixel
+	$token = wp_hash("emaily_track_{$post_id}_{$test_email}", 'emaily_track');
+	$tracking_url = add_query_arg(array(
+		'emaily_track' => 'open',
+		'campaign_id' => $post_id,
+		'email'       => urlencode($test_email),
+		'token'       => $token,
+	), home_url('/'));
+	$tracking_pixel = '<img src="' . esc_url($tracking_url) . '" width="1" height="1" alt="" />';
+
+	// Append tracking pixel
+	$email_content .= $tracking_pixel;
+
+	// Send email
+	$result = wp_mail($test_email, $subject, $email_content, $headers);
+
+	if ($result) {
+		emaily_log($post_id, "Test email sent to $test_email");
+		wp_send_json_success(__('Test email sent successfully!', 'emaily'));
+	} else {
+		emaily_log($post_id, "Failed to send test email to $test_email");
+		wp_send_json_error(__('Failed to send test email.', 'emaily'));
+	}
+}
+
 function emaily_get_contact_lists() {
 	$lists = get_posts(array(
 		'post_type'      => 'email_contact_list',
@@ -141,12 +291,10 @@ function emaily_get_contact_lists() {
 }
 
 // Replace placeholders in campaign content
-function emaily_replace_placeholders($content, $user, $placeholders ) {
-
-
+function emaily_replace_placeholders($content, $user, $placeholders) {
 	$replacables = [];
-	foreach ( $placeholders as $placeholder ) {
-		$replacables['%'.$placeholder.'%'] = emaily_get_user_info( $user, $placeholder );
+	foreach ($placeholders as $placeholder) {
+		$replacables['%'.$placeholder.'%'] = emaily_get_user_info($user, $placeholder);
 	}
 
 	return str_replace(
@@ -229,10 +377,14 @@ function emaily_save_campaign_settings($post_id) {
 	foreach ($lists as $list_id) {
 		$list_users = get_post_meta($list_id, 'email_contact_list_users', true);
 		if (is_array($list_users)) {
-			$recipients = array_merge($recipients, $list_users);
+			foreach ($list_users as $email ) {
+				if (is_email($email)) {
+					$recipients[] = $email;
+				}
+			}
 		}
 	}
-	$recipients = array_unique($recipients, SORT_REGULAR);
+	$recipients = array_unique($recipients);
 	update_post_meta($post_id, 'emaily_campaign_recipients', $recipients);
 	emaily_log($post_id, "Updated recipients: " . count($recipients) . " emails.");
 

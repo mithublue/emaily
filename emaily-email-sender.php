@@ -73,15 +73,22 @@ function emaily_send_campaign($campaign_id) {
 	$content = apply_filters('the_content', $post->post_content); // Process Gutenberg content
 
 	// Prepare email headers
-	$from_name = sanitize_text_field(get_bloginfo('name'));
-	$from_email = sanitize_email(get_option('admin_email'));
+	$from_email = carbon_get_post_meta($campaign_id, 'emaily_sender_email');
+	$from_name = carbon_get_post_meta($campaign_id, 'emaily_sender_name');
+	$reply_to = carbon_get_post_meta($campaign_id, 'emaily_reply_to');
+
+	// Validate and sanitize
+	$from_email = is_email($from_email) ? sanitize_email($from_email) : sanitize_email(get_option('admin_email'));
+	$from_name = !empty($from_name) ? sanitize_text_field($from_name) : sanitize_text_field(get_bloginfo('name'));
+	$reply_to = is_email($reply_to) ? sanitize_email($reply_to) : sanitize_email(get_option('admin_email'));
+
 	$headers = array(
 		'Content-Type: text/html; charset=UTF-8',
 		"From: {$from_name} <{$from_email}>",
-		"Reply-To: {$from_name} <{$from_email}>",
+		"Reply-To: {$reply_to}",
 	);
 
-	// Allow customization of From and Reply-To headers
+	// Allow customization of headers
 	$headers = apply_filters('emaily_email_headers', $headers, $campaign_id);
 
 	// Max retries for failed emails
