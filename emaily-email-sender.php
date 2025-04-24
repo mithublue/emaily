@@ -71,24 +71,32 @@ function emaily_send_campaign($campaign_id) {
 	$subject = $post->post_title;
 	$preheader = carbon_get_post_meta($campaign_id, 'emaily_preheader');
 	$content = apply_filters('the_content', $post->post_content); // Process Gutenberg content
-	$headers = array('Content-Type: text/html; charset=UTF-8');
+
+	// Prepare email headers
+	$from_name = sanitize_text_field(get_bloginfo('name'));
+	$from_email = sanitize_email(get_option('admin_email'));
+	$headers = array(
+		'Content-Type: text/html; charset=UTF-8',
+		"From: {$from_name} <{$from_email}>",
+		"Reply-To: {$from_name} <{$from_email}>",
+	);
+
+	// Allow customization of From and Reply-To headers
+	$headers = apply_filters('emaily_email_headers', $headers, $campaign_id);
 
 	// Max retries for failed emails
 	$max_retries = 3;
 
-	//generate placeholders that will be matched in content and will be replaced by user data
+	// Generate placeholders that will be matched in content and will be replaced by user data
 	$placeholders = emaily_generate_placeholders();
 
 	// Send emails
 	foreach ($emails_to_send as $e => $email) {
 		if (!is_email($email)) {
-
-			//invalid emails are removed from queue
-			unset( $emails_to_send[$e] );
-
-			//remove item by value from $email_queue
+			// Invalid emails are removed from queue
+			unset($emails_to_send[$e]);
+			// Remove item by value from $email_queue
 			$email_queue = array_diff($email_queue, array($email));
-
 			emaily_log($campaign_id, "Invalid email skipped: $email");
 			continue;
 		}
@@ -96,11 +104,11 @@ function emaily_send_campaign($campaign_id) {
 		// Replace placeholders in content
 		$user = get_user_by('email', $email);
 
-		//delete user, if doesn't exit
+		// Delete user if doesn't exist
 		if (!$user) {
 			emaily_log($campaign_id, "User not found for email: $email");
-			unset( $emails_to_send[$e] );
-			//remove item by value from $email_queue
+			unset($emails_to_send[$e]);
+			// Remove item by value from $email_queue
 			$email_queue = array_diff($email_queue, array($email));
 			continue;
 		}
