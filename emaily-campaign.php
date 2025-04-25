@@ -644,7 +644,6 @@ function emaily_save_campaign_settings($post_id, $post) {
 
 	// Save schedule
 	$schedule_datetime = carbon_get_post_meta($post->ID, 'emaily_campaign_schedule');
-	logger('$schedule_datetime',$schedule_datetime);
 	$post_status = get_post_status($post_id);
 	if ($schedule_datetime && $post_status === 'publish') {
 		$scheduled_time = strtotime($schedule_datetime);

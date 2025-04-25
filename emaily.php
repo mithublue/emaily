@@ -327,7 +327,7 @@ function emaily_import_users() {
 		}
 
 		$user_id = wp_insert_user(array(
-			'user_login'   => sanitize_user($name, true),
+			'user_login'   => sanitize_user($username = sanitize_user(explode('@', $email)[0]), true),
 			'user_email'   => $email,
 			'display_name' => $name,
 			'role'         => 'subscriber',
