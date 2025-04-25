@@ -606,12 +606,12 @@ function emaily_campaign_column_data($column, $post_id) {
 		echo esc_html($status === 'publish' ? 'Sent' : 'Draft');
 	}
 	if ($column === 'open_rate') {
-		$recipients = get_post_meta($post_id, 'emaily_campaign_recipients', true);
+		$sent = get_post_meta($post_id, 'emaily_campaign_sent_emails', true);
 		$opened = get_post_meta($post_id, 'emaily_campaign_opened_emails', true);
-		$recipient_count = is_array($recipients) ? count($recipients) : 0;
+		$sent_count = is_array($sent) ? count($sent) : 0;
 		$opened_count = is_array($opened) ? count($opened) : 0;
-		if ($recipient_count > 0) {
-			$open_rate = ($opened_count / $recipient_count) * 100;
+		if ($opened_count > 0) {
+			$open_rate = esc_html(number_format(($opened_count / $sent_count) * 100, 2) . '%');
 			printf('%.2f%%', $open_rate);
 		} else {
 			echo '0%';
