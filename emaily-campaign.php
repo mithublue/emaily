@@ -362,7 +362,7 @@ function emaily_send_test_email() {
 	// Replace placeholders
 	$user = get_user_by('email', $test_email);
 	$placeholders = emaily_generate_placeholders();
-	$personalized_content = emaily_replace_placeholders($content, $test_email, $placeholders);
+	$personalized_content = emaily_replace_placeholders($content, $user, $placeholders);
 
 	// Combine preheader and content
 	$email_content = '';
