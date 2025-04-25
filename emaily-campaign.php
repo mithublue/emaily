@@ -608,6 +608,15 @@ function emaily_save_campaign_settings($post_id, $post) {
 		return;
 	}
 
+	//if campaign is already completed, do not allow to save
+	if ( get_post_meta( $post_id, 'emaily_campaign_status', true ) == 'completed' ) {
+		wp_die(
+			__('Campaign has run already', 'emaily'),
+			__('Campaign Validation Error', 'emaily'),
+			array('back_link' => true)
+		);
+	}
+
 	if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) {
 		return;
 	}
