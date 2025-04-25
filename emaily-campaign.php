@@ -80,7 +80,11 @@ function emaily_check_campaigns() {
 				emaily_log($campaign_id, "Campaign not found or unpublished, removing from schedule.");
 			}
 			// Remove from schedule
-			unset($scheduled_campaigns[$campaign_id]);
+			//here it should be checked , if the queue empty or not, if empty then...
+			$email_queue = get_post_meta($campaign_id, 'emaily_campaign_email_queue', true);
+			if (!is_array($email_queue) || empty($email_queue)) {
+				unset($scheduled_campaigns[$campaign_id]);
+			}
 		}
 	}
 
@@ -191,6 +195,32 @@ function emaily_update_recipients_metabox_callback($post) {
 	<?php
 }
 
+// Add View Recipients metabox
+add_action('add_meta_boxes', 'emaily_add_view_recipients_metabox');
+function emaily_add_view_recipients_metabox() {
+	add_meta_box(
+		'emaily_view_recipients',
+		__('View Recipients', 'emaily'),
+		'emaily_view_recipients_metabox_callback',
+		'emaily_campaign',
+		'side',
+		'high'
+	);
+}
+
+function emaily_view_recipients_metabox_callback($post) {
+	?>
+	<p>
+		<button type="button" id="emaily-view-recipients-button" class="button button-secondary">
+			<?php _e('View Recipients', 'emaily'); ?>
+		</button>
+	</p>
+	<p class="description">
+		<?php _e('Click to view the recipient list for this campaign.', 'emaily'); ?>
+	</p>
+	<?php
+}
+
 // Enqueue JavaScript for Test Email
 add_action('admin_enqueue_scripts', 'emaily_enqueue_test_email_scripts');
 function emaily_enqueue_test_email_scripts($hook) {
@@ -232,7 +262,7 @@ function emaily_enqueue_update_recipients_scripts($hook) {
 
 	wp_enqueue_script(
 		'emaily-update-recipients',
-		plugin_dir_url(__FILE__) . 'js/emaily-update-recipients.js',
+		plugin_dir_url(__FILE__) . 'assets/js/emaily-update-recipients.js',
 		['jquery'],
 		'1.0',
 		true
@@ -248,6 +278,41 @@ function emaily_enqueue_update_recipients_scripts($hook) {
 			'strings'  => [
 				'confirm'        => __('Are you sure you want to update the recipient list? This will overwrite the existing recipients.', 'emaily'),
 				'error_generic'  => __('An error occurred while updating the recipient list.', 'emaily'),
+			],
+		]
+	);
+}
+
+// Enqueue JavaScript for View Recipients
+add_action('admin_enqueue_scripts', 'emaily_enqueue_view_recipients_scripts');
+function emaily_enqueue_view_recipients_scripts($hook) {
+	if (get_current_screen()->post_type !== 'emaily_campaign' || !in_array($hook, ['post.php', 'post-new.php'])) {
+		return;
+	}
+
+	// Enqueue jQuery UI for dialog
+	wp_enqueue_script('jquery-ui-dialog');
+	wp_enqueue_style('wp-jquery-ui-dialog');
+
+	wp_enqueue_script(
+		'emaily-recipient-popup',
+		plugin_dir_url(__FILE__) . 'assets/js/emaily-recipient-popup.js',
+		['jquery', 'jquery-ui-dialog'],
+		'1.0',
+		true
+	);
+
+	wp_localize_script(
+		'emaily-recipient-popup',
+		'emailyViewRecipients',
+		[
+			'ajax_url' => admin_url('admin-ajax.php'),
+			'nonce'    => wp_create_nonce('emaily_view_recipients_nonce'),
+			'post_id'  => get_the_ID(),
+			'strings'  => [
+				'title'          => __('Recipient List', 'emaily'),
+				'error_generic'  => __('An error occurred while fetching the recipient list.', 'emaily'),
+				'close'          => __('Close', 'emaily'),
 			],
 		]
 	);
@@ -381,6 +446,76 @@ function emaily_update_recipients() {
 	]);
 }
 
+// AJAX handler for viewing recipients
+add_action('wp_ajax_emaily_get_recipients', 'emaily_get_recipients');
+function emaily_get_recipients() {
+	check_ajax_referer('emaily_view_recipients_nonce', 'nonce');
+
+	$post_id = isset($_POST['post_id']) ? intval($_POST['post_id']) : 0;
+	$page = isset($_POST['page']) ? max(1, intval($_POST['page'])) : 1;
+	$per_page = 10;
+
+	if (!$post_id || get_post_type($post_id) !== 'emaily_campaign') {
+		wp_send_json_error(__('Invalid campaign.', 'emaily'));
+	}
+
+	$post = get_post($post_id);
+	if (!$post) {
+		wp_send_json_error(__('Campaign not found.', 'emaily'));
+	}
+
+	// Get recipients
+	$recipients = get_post_meta($post_id, 'emaily_campaign_recipients', true);
+	$recipients = is_array($recipients) ? $recipients : [];
+	$total_recipients = count($recipients);
+
+	// Pagination
+	$total_pages = max(1, ceil($total_recipients / $per_page));
+	$page = min($page, $total_pages);
+	$offset = ($page - 1) * $per_page;
+	$paged_recipients = array_slice($recipients, $offset, $per_page);
+
+	// Build HTML
+	ob_start();
+	?>
+	<div class="emaily-recipient-popup-content">
+		<p><strong><?php printf(_n('Total Recipient: %d', 'Total Recipients: %d', $total_recipients, 'emaily'), $total_recipients); ?></strong></p>
+		<?php if (empty($recipients)): ?>
+			<p><?php _e('No recipients found for this campaign.', 'emaily'); ?></p>
+		<?php else: ?>
+			<table class="widefat striped">
+				<thead>
+				<tr>
+					<th><?php _e('Email', 'emaily'); ?></th>
+				</tr>
+				</thead>
+				<tbody>
+				<?php foreach ($paged_recipients as $email): ?>
+					<tr>
+						<td><?php echo esc_html($email); ?></td>
+					</tr>
+				<?php endforeach; ?>
+				</tbody>
+			</table>
+			<div class="emaily-pagination" style="margin-top: 10px; text-align: center;">
+				<button class="button emaily-prev-page" <?php echo $page <= 1 ? 'disabled' : ''; ?> data-page="<?php echo $page - 1; ?>">
+					<?php _e('Previous', 'emaily'); ?>
+				</button>
+				<span style="margin: 0 10px;"><?php printf(__('Page %d of %d', 'emaily'), $page, $total_pages); ?></span>
+				<button class="button emaily-next-page" <?php echo $page >= $total_pages ? 'disabled' : ''; ?> data-page="<?php echo $page + 1; ?>">
+					<?php _e('Next', 'emaily'); ?>
+				</button>
+			</div>
+		<?php endif; ?>
+	</div>
+	<?php
+	$html = ob_get_clean();
+
+	emaily_log($post_id, "Fetched recipients for page $page: " . count($paged_recipients) . " emails displayed.");
+
+	wp_send_json_success(['html' => $html]);
+}
+
 function emaily_get_contact_lists() {
 	$lists = get_posts(array(
 		'post_type'      => 'email_contact_list',
@@ -434,7 +569,7 @@ function validate_emaily_campaign_schedule($post_id, $container) {
 	}
 
 	// Validate schedule
-	$schedule = carbon_get_post_meta($post_id, 'emaily_campaign_schedule');
+	/*$schedule = carbon_get_post_meta($post_id, 'emaily_campaign_schedule');
 	if (empty($schedule)) {
 		wp_die(
 			__('Error: Schedule date and time must be set.', 'emaily'),
@@ -463,11 +598,16 @@ function validate_emaily_campaign_schedule($post_id, $container) {
 			__('Campaign Validation Error', 'emaily'),
 			array('back_link' => true)
 		);
-	}
+	}*/
 }
 
 // Save campaign settings and manage schedules
-function emaily_save_campaign_settings($post_id) {
+function emaily_save_campaign_settings($post_id, $post) {
+
+	if (get_post_type($post_id) !== 'emaily_campaign') {
+		return;
+	}
+
 	if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) {
 		return;
 	}
@@ -494,7 +634,8 @@ function emaily_save_campaign_settings($post_id) {
 	emaily_log($post_id, "Updated recipients: " . count($recipients) . " emails.");
 
 	// Save schedule
-	$schedule_datetime = carbon_get_post_meta($post_id, 'emaily_campaign_schedule');
+	$schedule_datetime = carbon_get_post_meta($post->ID, 'emaily_campaign_schedule');
+	logger('$schedule_datetime',$schedule_datetime);
 	$post_status = get_post_status($post_id);
 	if ($schedule_datetime && $post_status === 'publish') {
 		$scheduled_time = strtotime($schedule_datetime);
@@ -519,46 +660,34 @@ function emaily_save_campaign_settings($post_id) {
 	} else {
 		update_option('emaily_scheduled_campaigns', $scheduled_campaigns);
 	}
-}
-add_action('save_post_emaily_campaign', 'emaily_save_campaign_settings', 999999);
 
-// Handle campaign status changes (publish, unpublish, etc.)
-function emaily_handle_campaign_status($new_status, $old_status, $post) {
-	if ($post->post_type !== 'emaily_campaign') {
-		return;
-	}
-
-	$scheduled_campaigns = get_option('emaily_scheduled_campaigns', array());
-
-	if ($new_status !== 'publish') {
+	//schedule post if publish, unschedule post if unpublished
+	if ($post_status !== 'publish') {
 		// Remove from schedule if unpublished
-		if (isset($scheduled_campaigns[$post->ID])) {
-			unset($scheduled_campaigns[$post->ID]);
+		if (isset($scheduled_campaigns[$post_id])) {
+			unset($scheduled_campaigns[$post_id]);
 			update_post_meta($post->ID, 'emaily_campaign_status', 'draft');
 			emaily_log($post->ID, "Campaign unpublished, removed from schedule.");
-		}
-	} elseif ($new_status === 'publish' && $old_status !== 'publish') {
-		// Add to schedule if newly published
-		$schedule_datetime = carbon_get_post_meta($post->ID, 'emaily_campaign_schedule');
-		if ($schedule_datetime) {
-			$scheduled_time = strtotime($schedule_datetime);
-			if ($scheduled_time !== false && $scheduled_time > current_time('timestamp')) {
-				$scheduled_campaigns[$post->ID] = $scheduled_time;
-				update_post_meta($post->ID, 'emaily_campaign_status', 'scheduled');
-				emaily_log($post->ID, "Campaign published, scheduled for $schedule_datetime.");
+		} elseif ($post_status === 'publish') {
+			// Add to schedule if newly published
+			if ($schedule_datetime) {
+				$scheduled_time = strtotime($schedule_datetime);
+				if ($scheduled_time !== false && $scheduled_time > current_time('timestamp')) {
+					$scheduled_campaigns[$post->ID] = $scheduled_time;
+					update_post_meta($post->ID, 'emaily_campaign_status', 'scheduled');
+					emaily_log($post->ID, "Campaign published, scheduled for $schedule_datetime.");
+				}
 			}
 		}
 	}
 
-	// Update or delete option
 	if (empty($scheduled_campaigns)) {
 		delete_option('emaily_scheduled_campaigns');
 	} else {
 		update_option('emaily_scheduled_campaigns', $scheduled_campaigns);
 	}
 }
-add_action('transition_post_status', 'emaily_handle_campaign_status', 9999999, 3);
-
+add_action('save_post', 'emaily_save_campaign_settings', 999, 2 );
 // Unschedule on campaign deletion
 function emaily_unschedule_campaign($post_id) {
 	if (get_post_type($post_id) !== 'emaily_campaign') {
