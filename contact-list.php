@@ -291,3 +291,28 @@ if (!function_exists('emaily_log')) {
 		file_put_contents($log_file, $log_message, FILE_APPEND);
 	}
 }
+
+
+// Add custom columns to the users table
+add_filter('manage_users_columns', 'custom_add_user_columns');
+function custom_add_user_columns($columns) {
+	$columns['emaily_name'] = __('Name', 'emaily');
+	$columns['emaily_gender'] = __('Gender', 'emaily');
+	$columns['emaily_country'] = __('Country', 'emaily');
+	return $columns;
+}
+
+// Populate custom columns with user meta data
+add_action('manage_users_custom_column', 'custom_show_user_columns_content', 10, 3);
+function custom_show_user_columns_content($value, $column_name, $user_id) {
+	switch ($column_name) {
+		case 'emaily_name':
+			return esc_html(get_user_meta($user_id, 'emaily_name', true));
+		case 'emaily_gender':
+			return esc_html(get_user_meta($user_id, 'emaily_gender', true));
+		case 'emaily_country':
+			return esc_html(get_user_meta($user_id, 'emaily_country', true));
+		default:
+			return $value;
+	}
+}

@@ -323,20 +323,20 @@ function emaily_import_users() {
 		if (email_exists($email)) {
 			$skip_count++;
 			$user_emails[] = $email;
-			continue;
-		}
+			$user_id = get_user_by( 'email', $email )->ID;
+		} else {
+			$user_id = wp_insert_user(array(
+				'user_login'   => sanitize_user($username = sanitize_user(explode('@', $email)[0]), true),
+				'user_email'   => $email,
+				'display_name' => $name,
+				'role'         => 'subscriber',
+				'user_pass'    => wp_generate_password(),
+			));
 
-		$user_id = wp_insert_user(array(
-			'user_login'   => sanitize_user($username = sanitize_user(explode('@', $email)[0]), true),
-			'user_email'   => $email,
-			'display_name' => $name,
-			'role'         => 'subscriber',
-			'user_pass'    => wp_generate_password(),
-		));
-
-		if (is_wp_error($user_id)) {
-			$error_messages[] = sprintf(__('Failed to create user %s: %s.', 'emaily'), $email, $user_id->get_error_message());
-			continue;
+			if (is_wp_error($user_id)) {
+				$error_messages[] = sprintf(__('Failed to create user %s: %s.', 'emaily'), $email, $user_id->get_error_message());
+				continue;
+			}
 		}
 
 		foreach ($all_fields as $field) {
