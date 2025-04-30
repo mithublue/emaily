@@ -353,6 +353,9 @@ function emaily_import_users() {
 			update_user_meta($user_id, $meta_key, sanitize_text_field($row[$field]));
 		}
 
+		//make user verified
+		update_user_meta($user_id, 'emaily_verification_status', 'verified' );
+
 		$user_emails[] = $email;
 		$success_count++;
 	}
@@ -391,6 +394,7 @@ function emaily_handle_form_submission() {
 
 	$fields = get_post_meta($form_id, 'emaily_form_fields', true);
 	$fields = is_array($fields) ? $fields : array();
+	$fields = apply_filters( 'emaily_subscription_form_fields', $fields, $form_id, $_POST );
 	if (empty($fields) || !in_array('Email', $fields)) {
 		wp_send_json_error(array('message' => __('Form configuration error: Email field is required.', 'emaily')));
 	}
@@ -423,7 +427,7 @@ function emaily_handle_form_submission() {
 	}
 
 	$user_id = wp_insert_user(array(
-		'user_login'   => sanitize_user($name ?: $email, true),
+		'user_login'   => sanitize_user($username = sanitize_user(explode('@', $email)[0]), true),
 		'user_email'   => $email,
 		'display_name' => $name ?: $email,
 		'role'         => 'subscriber',

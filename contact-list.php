@@ -299,6 +299,7 @@ function custom_add_user_columns($columns) {
 	$columns['emaily_name'] = __('Name', 'emaily');
 	$columns['emaily_gender'] = __('Gender', 'emaily');
 	$columns['emaily_country'] = __('Country', 'emaily');
+	$columns['emaily_verification_status'] = __('Is Verified', 'emaily');
 	return $columns;
 }
 
@@ -312,6 +313,8 @@ function custom_show_user_columns_content($value, $column_name, $user_id) {
 			return esc_html(get_user_meta($user_id, 'emaily_gender', true));
 		case 'emaily_country':
 			return esc_html(get_user_meta($user_id, 'emaily_country', true));
+		case 'emaily_verification_status':
+			return esc_html(get_user_meta($user_id, 'emaily_verification_status', true));
 		default:
 			return $value;
 	}
