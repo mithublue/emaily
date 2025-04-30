@@ -270,7 +270,7 @@ function emaily_import_users() {
 	$all_fields = array(
 		'Email', 'Name', 'Lastname', 'Middlename', 'Phone', 'Date of birth',
 		'Company name', 'Industry', 'Department', 'Job title', 'State',
-		'Postal code', 'Lead source', 'Salary', 'Country', 'City', 'Tags'
+		'Postal code', 'Lead source', 'Salary', 'Country', 'City', '.', 'Tags'
 	);
 
 	$data = array();
@@ -343,7 +343,13 @@ function emaily_import_users() {
 			if ($field === 'Email' || empty($row[$field])) {
 				continue;
 			}
-			$meta_key = 'emaily_' . strtolower(str_replace(' ', '_', $field));
+
+			if ( $field == '.' ) {
+				$fieldname = 'gender';
+			} else {
+				$fieldname = $field;
+			}
+			$meta_key = 'emaily_' . strtolower(str_replace(' ', '_', $fieldname));
 			update_user_meta($user_id, $meta_key, sanitize_text_field($row[$field]));
 		}
 

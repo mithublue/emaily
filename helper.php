@@ -6,7 +6,7 @@ function emaily_available_form_fields() {
 	$available_fields = array(
 		'Email', 'Name', 'Lastname', 'Middlename', 'Phone', 'Date of birth',
 		'Company name', 'Industry', 'Department', 'Job title', 'State',
-		'Postal code', 'Lead source', 'Salary', 'Country', 'City', 'Tags'
+		'Postal code', 'Lead source', 'Salary', 'Country', 'City', 'Tags', 'Gender'
 	);
 	return $available_fields;
 }
