@@ -104,6 +104,19 @@ function emaily_form_shortcode($atts) {
 							<?php if ($field === 'Email' || $field === 'Name') echo 'required'; ?>>
 					</div>
 				<?php endforeach; ?>
+				<div>
+					<label class="block text-sm font-medium text-gray-700">কি বলে সম্বোধন করব ?</label>
+					<div class="mt-2 space-y-2" id="emaily_gender">
+						<label class="inline-flex items-center">
+							<input type="radio" name="emaily_gender" value="ভাই" class="form-radio h-4 w-4 text-indigo-600" required>
+							<span class="ml-2">ভাই</span>
+						</label>
+						<label class="inline-flex items-center">
+							<input type="radio" name="emaily_gender" value="আপু" class="form-radio h-4 w-4 text-indigo-600">
+							<span class="ml-2">আপু</span>
+						</label>
+					</div>
+				</div>
 				<button type="submit" class="emaily-submit-button button">
 					<?php esc_html_e('Subscribe', 'emaily'); ?>
 				</button>
@@ -208,3 +221,8 @@ function emaily_form_shortcode($atts) {
 	return ob_get_clean();
 }
 add_shortcode('emaily_form', 'emaily_form_shortcode');
+
+add_filter( 'emaily_subscription_form_fields', function ( $fields, $form_id, $post_object ) {
+	$fields[] = 'Gender';
+	return $fields;
+}, 10, 3 );

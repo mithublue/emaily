@@ -47,7 +47,8 @@ jQuery(document).ready(function($) {
 				emaily_salary: $form.find('#emaily_salary').val(),
 				emaily_country: $form.find('#emaily_country').val(),
 				emaily_city: $form.find('#emaily_city').val(),
-				emaily_tags: $form.find('#emaily_tags').val()
+				emaily_tags: $form.find('#emaily_tags').val(),
+				emaily_gender: $form.find('#emaily_gender [name="emaily_gender"]:checked').val()
 			},
 			success: function(response) {
 				if (response.success) {
