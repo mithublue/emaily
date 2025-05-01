@@ -367,9 +367,86 @@ function emaily_send_test_email() {
 	// Combine preheader and content
 	$email_content = '';
 	if ($preheader) {
-		$email_content .= '<p style="color: #666; font-size: 12px; margin-bottom: 10px;">' . esc_html($preheader) . '</p>';
+		$email_content .= '<p style="margin-bottom: 10px;">' . esc_html($preheader) . '</p>';
 	}
-	$email_content .= $personalized_content;
+	ob_start();
+	?>
+	<style>
+        .email_content {
+            font-family: Georgia, 'Times New Roman', Times, serif;
+            font-size: 18px;
+            line-height: 2;
+            color: #333;
+            background-color: #ffffff;
+            padding: 24px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .email_content h1,
+        .email_content h2,
+        .email_content h3 {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #222;
+            margin-top: 1.5em;
+            margin-bottom: 0.5em;
+            line-height: 2;
+        }
+
+        .email_content h1 {
+            font-size: 32px;
+            font-weight: 700;
+        }
+
+        .email_content h2 {
+            font-size: 28px;
+            font-weight: 600;
+        }
+
+        .email_content h3 {
+            font-size: 24px;
+            font-weight: 500;
+        }
+
+        .email_content p {
+            margin-bottom: 1.2em;
+        }
+
+        .email_content ul,
+        .email_content ol {
+            margin-left: 1.5em;
+            margin-bottom: 1.2em;
+        }
+
+        .email_content li {
+            margin-bottom: 0.5em;
+            line-height: 2;
+        }
+
+        .email_content img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 1em auto;
+            border-radius: 6px;
+        }
+
+        .email_content a {
+            color: #0066cc;
+            text-decoration: underline;
+        }
+
+        .email_content blockquote {
+            border-left: 4px solid #ccc;
+            padding-left: 1em;
+            color: #666;
+            font-style: italic;
+            margin: 1.5em 0;
+        }
+	</style>
+	<?php
+	$style = ob_get_clean();
+	$email_content .= $style . '<div class="email_content">' . $personalized_content . '</div>';
 
 	// Generate tracking pixel
 	$token = wp_hash("emaily_track_{$post_id}_{$test_email}", 'emaily_track');
