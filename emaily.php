@@ -94,6 +94,14 @@ function emaily_add_metabox() {
 		'normal',
 		'high'
 	);
+	add_meta_box(
+		'emaily_campaign_opens',
+		__('Email Open Tracking', 'emaily'),
+		'emaily_campaign_opens_metabox',
+		'emaily_campaign',
+		'normal',
+		'high'
+	);
 }
 add_action('add_meta_boxes', 'emaily_add_metabox');
 
@@ -132,6 +140,60 @@ function emaily_user_import_metabox($post) {
         #emaily-import-messages.error {
             border-color: #dc3232;
             background: #fff4f4;
+        }
+	</style>
+	<?php
+}
+
+// Render the campaign opens metabox
+function emaily_campaign_opens_metabox($post) {
+	$opened_emails = get_post_meta($post->ID, 'emaily_campaign_opened_emails', true);
+	$opened_emails = is_array($opened_emails) ? $opened_emails : array();
+	?>
+	<div id="emaily-campaign-opens-metabox">
+		<p><?php esc_html_e('Details of email open events for this campaign.', 'emaily'); ?></p>
+		<?php if (empty($opened_emails)) : ?>
+			<p><?php esc_html_e('No email opens recorded yet.', 'emaily'); ?></p>
+		<?php else : ?>
+			<table class="wp-list-table widefat fixed striped">
+				<thead>
+				<tr>
+					<th><?php esc_html_e('Email', 'emaily'); ?></th>
+					<th><?php esc_html_e('Open Count', 'emaily'); ?></th>
+					<th><?php esc_html_e('Open Timestamps', 'emaily'); ?></th>
+				</tr>
+				</thead>
+				<tbody>
+				<?php foreach ($opened_emails as $email => $data) : ?>
+					<tr>
+						<td><?php echo esc_html($email); ?></td>
+						<td><?php echo esc_html($data['count']); ?></td>
+						<td>
+							<?php
+							if (is_array($data['timestamps'])) {
+								echo esc_html(implode(', ', array_map(function($ts) {
+									return date_i18n('Y-m-d H:i:s', strtotime($ts));
+								}, $data['timestamps'])));
+							} else {
+								echo esc_html(date_i18n('Y-m-d H:i:s', strtotime($data['timestamps'])));
+							}
+							?>
+						</td>
+					</tr>
+				<?php endforeach; ?>
+				</tbody>
+			</table>
+		<?php endif; ?>
+	</div>
+	<style>
+        #emaily-campaign-opens-metabox {
+            padding: 10px;
+        }
+        #emaily-campaign-opens-metabox table {
+            width: 100%;
+        }
+        #emaily-campaign-opens-metabox th, #emaily-campaign-opens-metabox td {
+            padding: 10px;
         }
 	</style>
 	<?php
@@ -381,7 +443,7 @@ function emaily_validate_recaptcha($token) {
 // Handle AJAX form submission with email verification
 function emaily_handle_form_submission() {
 	check_ajax_referer('emaily_form_submit', 'nonce');
-logger('$postdata',$_POST);
+
 	// Check honeypot if enabled
 	$enable_honeypot = carbon_get_theme_option('emaily_enable_honeypot');
 	if ($enable_honeypot && !empty($_POST['emaily_honeypot'])) {
@@ -617,6 +679,7 @@ add_action('manage_email_contact_list_posts_custom_column', 'emaily_contact_list
 function emaily_campaign_columns($columns) {
 	$columns['campaign_status'] = __('Campaign Status', 'emaily');
 	$columns['open_rate'] = __('Open Rate', 'emaily');
+	$columns['unique_opens'] = __('Unique Opens', 'emaily');
 	return $columns;
 }
 add_filter('manage_emaily_campaign_posts_columns', 'emaily_campaign_columns');
@@ -631,12 +694,17 @@ function emaily_campaign_column_data($column, $post_id) {
 		$opened = get_post_meta($post_id, 'emaily_campaign_opened_emails', true);
 		$sent_count = is_array($sent) ? count($sent) : 0;
 		$opened_count = is_array($opened) ? count($opened) : 0;
-		if ($opened_count > 0) {
-			$open_rate = esc_html(number_format(($opened_count / $sent_count) * 100, 2) . '%');
-			printf('%.2f%%', $open_rate);
+		if ($sent_count > 0) {
+			$open_rate = number_format(($opened_count / $sent_count) * 100, 2);
+			echo esc_html($open_rate . '%');
 		} else {
 			echo '0%';
 		}
+	}
+	if ($column === 'unique_opens') {
+		$opened = get_post_meta($post_id, 'emaily_campaign_opened_emails', true);
+		$unique_opens = is_array($opened) ? count($opened) : 0;
+		echo esc_html($unique_opens);
 	}
 }
 add_action('manage_emaily_campaign_posts_custom_column', 'emaily_campaign_column_data', 10, 2);
@@ -674,11 +742,26 @@ function emaily_handle_tracking() {
 	$opened_emails = get_post_meta($campaign_id, 'emaily_campaign_opened_emails', true);
 	$opened_emails = is_array($opened_emails) ? $opened_emails : array();
 
+	// Initialize or update open data for the email
 	if (!isset($opened_emails[$email])) {
-		$opened_emails[$email] = current_time('mysql');
-		update_post_meta($campaign_id, 'emaily_campaign_opened_emails', $opened_emails);
-		emaily_log($campaign_id, "Email opened by $email");
+		$opened_emails[$email] = array(
+			'count' => 0,
+			'timestamps' => array(),
+		);
+	} elseif (!is_array($opened_emails[$email])) {
+		// Migrate old format (single timestamp) to new format
+		$opened_emails[$email] = array(
+			'count' => 1,
+			'timestamps' => array($opened_emails[$email]),
+		);
 	}
+
+	// Record new open event
+	$opened_emails[$email]['count']++;
+	$opened_emails[$email]['timestamps'][] = current_time('mysql');
+
+	update_post_meta($campaign_id, 'emaily_campaign_opened_emails', $opened_emails);
+	emaily_log($campaign_id, "Email opened by $email (Count: {$opened_emails[$email]['count']})");
 
 	header('Content-Type: image/png');
 	echo base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=');
