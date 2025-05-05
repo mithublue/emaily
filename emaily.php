@@ -27,40 +27,6 @@ require_once __DIR__ . '/emaily-settings.php';
 require_once __DIR__ . '/helper.php';
 require_once __DIR__ . '/contact-list.php';
 
-/*function emaily_register_contact_list_post_type() {
-	$labels = array(
-		'name'               => __('Email Contact Lists', 'emaily'),
-		'singular_name'      => __('Email Contact List', 'emaily'),
-		'menu_name'          => __('Email Lists', 'emaily'),
-		'name_admin_bar'     => __('Email Contact List', 'emaily'),
-		'add_new'            => __('Add New', 'emaily'),
-		'add_new_item'       => __('Add New Email Contact List', 'emaily'),
-		'new_item'           => __('New Email Contact List', 'emaily'),
-		'edit_item'          => __('Edit Email Contact List', 'emaily'),
-		'view_item'          => __('View Email Contact List', 'emaily'),
-		'all_items'          => __('All Email Lists', 'emaily'),
-		'search_items'       => __('Search Email Contact Lists', 'emaily'),
-		'not_found'          => __('No email contact lists found.', 'emaily'),
-	);
-
-	$args = array(
-		'labels'             => $labels,
-		'public'             => false,
-		'show_ui'            => true,
-		'show_in_menu'       => 'emaily',
-		'query_var'          => true,
-		'rewrite'            => array('slug' => 'email-contact-list'),
-		'capability_type'    => 'post',
-		'has_archive'        => false,
-		'hierarchical'       => false,
-		'supports'           => array('title', 'editor'),
-		'show_in_rest'       => true,
-	);
-
-	register_post_type('email_contact_list', $args);
-}
-add_action('init', 'emaily_register_contact_list_post_type');*/
-
 // Add the Emaily admin menu
 function emaily_admin_menu() {
 	add_menu_page(
@@ -227,15 +193,18 @@ function emaily_frontend_enqueue() {
 		'emaily-form-frontend-js',
 		plugin_dir_url(__FILE__) . 'assets/js/form-frontend.js',
 		array('jquery'),
-		'2.0',
+		false,
 		true
 	);
+	$recaptcha_site_key = carbon_get_theme_option('emaily_recaptcha_site_key');
+	$enable_recaptcha = carbon_get_theme_option('emaily_enable_recaptcha');
 	wp_localize_script(
 		'emaily-form-frontend-js',
 		'emailyAjax',
 		array(
 			'ajax_url' => admin_url('admin-ajax.php'),
 			'nonce'    => wp_create_nonce('emaily_form_submit'),
+			'recaptcha_site_key' => $recaptcha_site_key,
 		)
 	);
 }
@@ -383,9 +352,51 @@ function emaily_import_users() {
 }
 add_action('wp_ajax_emaily_import_users', 'emaily_import_users');
 
+// Validate reCAPTCHA token
+function emaily_validate_recaptcha($token) {
+	$secret_key = carbon_get_theme_option('emaily_recaptcha_secret_key');
+	if (empty($secret_key)) {
+		return false; // reCAPTCHA not configured
+	}
+
+	$response = wp_remote_post('https://www.google.com/recaptcha/api/siteverify', array(
+		'body' => array(
+			'secret'   => $secret_key,
+			'response' => $token,
+			'remoteip' => $_SERVER['REMOTE_ADDR'],
+		),
+	));
+
+	if (is_wp_error($response)) {
+		return false;
+	}
+
+	$body = wp_remote_retrieve_body($response);
+	$data = json_decode($body, true);
+
+	// Check if the response is valid and the score is above threshold (0.5 for v3)
+	return isset($data['success']) && $data['success'] && (isset($data['score']) ? $data['score'] >= 0.5 : true);
+}
+
 // Handle AJAX form submission with email verification
 function emaily_handle_form_submission() {
 	check_ajax_referer('emaily_form_submit', 'nonce');
+logger('$postdata',$_POST);
+	// Check honeypot if enabled
+	$enable_honeypot = carbon_get_theme_option('emaily_enable_honeypot');
+	if ($enable_honeypot && !empty($_POST['emaily_honeypot'])) {
+		wp_send_json_error(array('message' => __('Invalid submission detected.', 'emaily')));
+	}
+
+	// Check reCAPTCHA if enabled
+	$enable_recaptcha = carbon_get_theme_option('emaily_enable_recaptcha');
+	$recaptcha_site_key = carbon_get_theme_option('emaily_recaptcha_site_key');
+	if ($enable_recaptcha && $recaptcha_site_key) {
+		$recaptcha_token = isset($_POST['g-recaptcha-response']) ? sanitize_text_field($_POST['g-recaptcha-response']) : '';
+		if (!emaily_validate_recaptcha($recaptcha_token)) {
+			wp_send_json_error(array('message' => __('reCAPTCHA verification failed. Please try again.', 'emaily')));
+		}
+	}
 
 	$form_id = isset($_POST['form_id']) ? intval($_POST['form_id']) : 0;
 	if ($form_id === 0) {
@@ -570,7 +581,7 @@ add_action('wp', 'emaily_schedule_cleanup');
 
 // Cleanup unverified users
 function emaily_cleanup_unverified_users() {
-	$users = get_users(array(
+	$users    = get_users(array(
 		'meta_key'     => 'emaily_verification_status',
 		'meta_value'   => 'pending',
 		'meta_compare' => '=',

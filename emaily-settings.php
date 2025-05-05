@@ -26,6 +26,18 @@ function emaily_settings_fields() {
 		         Field::make('text', 'emaily_confirmation_failed_message', __('Email Confirmation Failed Message', 'emaily'))
 		              ->set_default_value(__('Email verification failed. Please try subscribing again.', 'emaily'))
 		              ->set_help_text(__('Message shown when email verification fails.', 'emaily')),
+	         ))
+	         ->add_tab(__('reCAPTCHA', 'emaily'), array(
+		         Field::make('checkbox', 'emaily_enable_recaptcha', __('Enable reCAPTCHA', 'emaily'))
+		              ->set_default_value(false)
+		              ->set_help_text(__('Enable Google reCAPTCHA v3 for form submissions.', 'emaily')),
+		         Field::make('text', 'emaily_recaptcha_site_key', __('reCAPTCHA Site Key', 'emaily'))
+		              ->set_help_text(__('Enter your Google reCAPTCHA v3 site key. Obtain it from https://www.google.com/recaptcha.', 'emaily')),
+		         Field::make('text', 'emaily_recaptcha_secret_key', __('reCAPTCHA Secret Key', 'emaily'))
+		              ->set_help_text(__('Enter your Google reCAPTCHA v3 secret key.', 'emaily')),
+		         Field::make('checkbox', 'emaily_enable_honeypot', __('Enable Honeypot', 'emaily'))
+		              ->set_default_value(true)
+		              ->set_help_text(__('Enable honeypot field to trap bots.', 'emaily')),
 	         ));
 }
 

@@ -33,6 +33,11 @@ function emaily_form_shortcode($atts) {
 	$confirmation_success_message = carbon_get_theme_option('emaily_confirmation_success_message') ?: __('Your email has been verified! Thank you for subscribing.', 'emaily');
 	$confirmation_failed_message = carbon_get_theme_option('emaily_confirmation_failed_message') ?: __('Email verification failed. Please try subscribing again.', 'emaily');
 
+	// Get reCAPTCHA and honeypot settings
+	$enable_recaptcha = carbon_get_theme_option('emaily_enable_recaptcha');
+	$recaptcha_site_key = carbon_get_theme_option('emaily_recaptcha_site_key');
+	$enable_honeypot = carbon_get_theme_option('emaily_enable_honeypot');
+
 	ob_start();
 	?>
 	<div class="emaily-form-wrapper" data-form-type="<?php echo esc_attr($form_type); ?>">
@@ -65,6 +70,12 @@ function emaily_form_shortcode($atts) {
 					<form class="emaily-form emaily-ajax-form" data-form-id="<?php echo esc_attr($form_id); ?>">
 						<?php wp_nonce_field('emaily_form_submit', 'emaily_nonce'); ?>
 						<input type="hidden" name="form_id" value="<?php echo esc_attr($form_id); ?>">
+						<?php if ($enable_recaptcha && $recaptcha_site_key) : ?>
+							<input type="hidden" name="g-recaptcha-response" class="g-recaptcha-response">
+						<?php endif; ?>
+						<?php if ($enable_honeypot) : ?>
+							<input type="text" name="emaily_honeypot" class="emaily-honeypot" style="display: none;" autocomplete="off">
+						<?php endif; ?>
 						<?php foreach ($fields as $field) : ?>
 							<div class="emaily-form-group">
 								<label for="emaily_<?php echo esc_attr(strtolower(str_replace(' ', '_', $field))); ?>">
@@ -79,6 +90,19 @@ function emaily_form_shortcode($atts) {
 									<?php if ($field === 'Email' || $field === 'Name') echo 'required'; ?>>
 							</div>
 						<?php endforeach; ?>
+						<div>
+							<label class="block text-sm font-medium text-gray-700">কি বলে সম্বোধন করব ?</label>
+							<div class="mt-2 space-y-2" id="emaily_gender">
+								<label class="inline-flex items-center">
+									<input type="radio" name="emaily_gender" value="ভাই" class="form-radio h-4 w-4 text-indigo-600" required>
+									<span class="ml-2">ভাই</span>
+								</label>
+								<label class="inline-flex items-center">
+									<input type="radio" name="emaily_gender" value="আপু" class="form-radio h-4 w-4 text-indigo-600">
+									<span class="ml-2">আপু</span>
+								</label>
+							</div>
+						</div>
 						<button type="submit" class="emaily-submit-button button">
 							<?php esc_html_e('Subscribe', 'emaily'); ?>
 						</button>
@@ -90,6 +114,12 @@ function emaily_form_shortcode($atts) {
 			<form class="emaily-form emaily-ajax-form" data-form-id="<?php echo esc_attr($form_id); ?>">
 				<?php wp_nonce_field('emaily_form_submit', 'emaily_nonce'); ?>
 				<input type="hidden" name="form_id" value="<?php echo esc_attr($form_id); ?>">
+				<?php if ($enable_recaptcha && $recaptcha_site_key) : ?>
+					<input type="hidden" name="g-recaptcha-response" class="g-recaptcha-response">
+				<?php endif; ?>
+				<?php if ($enable_honeypot) : ?>
+					<input type="text" name="emaily_honeypot" class="emaily-honeypot" style="display: none;" autocomplete="off">
+				<?php endif; ?>
 				<?php foreach ($fields as $field) : ?>
 					<div class="emaily-form-group">
 						<label for="emaily_<?php echo esc_attr(strtolower(str_replace(' ', '_', $field))); ?>">
@@ -124,6 +154,10 @@ function emaily_form_shortcode($atts) {
 			</form>
 		<?php endif; ?>
 	</div>
+
+	<?php if ($enable_recaptcha && $recaptcha_site_key) : ?>
+		<script src="https://www.google.com/recaptcha/api.js?render=<?php echo esc_attr($recaptcha_site_key); ?>"></script>
+	<?php endif; ?>
 
 	<style>
         .emaily-form-wrapper {
