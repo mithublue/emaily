@@ -41,20 +41,24 @@ function emaily_send_campaign($campaign_id) {
 	// Update status to sending
 	update_post_meta($campaign_id, 'emaily_campaign_status', 'sending');
 
-	// Get email queue, initialize if not set
+	// Get email queue
 	$email_queue = get_post_meta($campaign_id, 'emaily_campaign_email_queue', true);
+
+	// Fetch recipients only if queue is not initialized (first run)
 	if (!is_array($email_queue) || empty($email_queue)) {
-		$recipients = get_post_meta($campaign_id, 'emaily_campaign_recipients', true);
-		if (!is_array($recipients) || empty($recipients)) {
+		$recipients = emaily_get_recipients_from_lists( $campaign_id );
+		if (empty($recipients)) {
 			emaily_log($campaign_id, "No recipients found for campaign.");
 			update_post_meta($campaign_id, 'emaily_campaign_all_emails_sent', true);
 			update_post_meta($campaign_id, 'emaily_campaign_status', 'completed');
 			delete_transient($lock_key);
 			return;
 		}
-		// Convert recipients to queue format (flat array of emails)
-		$email_queue = $recipients; // Use email addresses only
+
+		// Initialize queue with fetched recipients
+		$email_queue = $recipients;
 		update_post_meta($campaign_id, 'emaily_campaign_email_queue', $email_queue);
+		emaily_log($campaign_id, "Initialized email queue with " . count($email_queue) . " recipients.");
 	}
 
 	// Get sent and failed emails
@@ -102,7 +106,6 @@ function emaily_send_campaign($campaign_id) {
 		if (!is_email($email)) {
 			// Invalid emails are removed from queue
 			unset($emails_to_send[$e]);
-			// Remove item by value from $email_queue
 			$email_queue = array_diff($email_queue, array($email));
 			emaily_log($campaign_id, "Invalid email skipped: $email");
 			continue;
@@ -115,7 +118,6 @@ function emaily_send_campaign($campaign_id) {
 		if (!$user) {
 			emaily_log($campaign_id, "User not found for email: $email");
 			unset($emails_to_send[$e]);
-			// Remove item by value from $email_queue
 			$email_queue = array_diff($email_queue, array($email));
 			continue;
 		}
@@ -247,8 +249,6 @@ function emaily_send_campaign($campaign_id) {
 
 	// Update queue
 	$remaining_emails = array_diff($email_queue, $emails_to_send);
-
-	update_post_meta($campaign_id, 'emaily_campaign_recipients', array_values($remaining_emails));
 
 	if (empty($remaining_emails)) {
 		// All emails sent

@@ -506,7 +506,6 @@ function emaily_update_recipients() {
 	$recipient_count = count($recipients);
 
 	// Update recipients meta
-	update_post_meta($post_id, 'emaily_campaign_recipients', $recipients);
 	emaily_log($post_id, "Recipient list updated: $recipient_count emails.");
 
 	wp_send_json_success([
@@ -542,8 +541,7 @@ function emaily_get_recipients() {
 	}
 
 	// Get recipients
-	$recipients = get_post_meta($post_id, 'emaily_campaign_recipients', true);
-	$recipients = is_array($recipients) ? $recipients : [];
+	$recipients = emaily_get_recipients_from_lists( $post_id );
 	$total_recipients = count($recipients);
 
 	// Pagination
@@ -716,7 +714,6 @@ function emaily_save_campaign_settings($post_id, $post) {
 		}
 	}
 	$recipients = array_unique($recipients);
-	update_post_meta($post_id, 'emaily_campaign_recipients', $recipients);
 	emaily_log($post_id, "Updated recipients: " . count($recipients) . " emails.");
 
 	// Save schedule

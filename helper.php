@@ -32,3 +32,19 @@ function emaily_generate_placeholders() {
 	}
 	return $field_names;
 }
+
+function emaily_get_recipients_from_lists( $campaign_id ) {
+	//get recipients from the contact lists
+	$contact_lists = carbon_get_post_meta( $campaign_id, 'emaily_campaign_lists' );
+	logger('$recipients',$contact_lists);
+	$contact_lists = is_array( $contact_lists ) ? $contact_lists : array();
+	$recipients = array();
+	foreach ( $contact_lists as $list_id ) {
+		$list_recipients = get_post_meta( $list_id, 'email_contact_list_users', true );
+		$list_recipients = is_array( $list_recipients ) ? $list_recipients : array();
+		$recipients = array_merge( $recipients, $list_recipients );
+	}
+	$recipients = array_values( array_unique( $recipients ) );
+	emaily_log( $campaign_id, "Fetched " . count( $recipients ) . " recipients from contact lists for initial queue." );
+	return $recipients;
+}
