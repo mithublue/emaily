@@ -379,7 +379,7 @@ function emaily_send_test_email() {
             color: #333;
             background-color: #ffffff;
             padding: 24px;
-            max-width: 800px;
+            max-width: 700px;
             margin: 0 auto;
         }
 
