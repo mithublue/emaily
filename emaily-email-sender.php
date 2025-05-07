@@ -18,6 +18,44 @@ if (!function_exists('emaily_log')) {
 	}
 }
 
+// Function to inline CSS for email content
+function emaily_inline_css($content) {
+	// Basic inline CSS rules for common Gutenberg blocks
+	$inline_styles = array(
+		'p' => 'margin: 0 0 1.2em 0; font-family: Georgia, \'Times New Roman\', Times, serif; font-size: 18px; line-height: 2; color: #333;',
+		'h1' => 'font-family: \'Segoe UI\', Tahoma, Geneva, Verdana, sans-serif; font-size: 32px; font-weight: 700; color: #222; margin: 1.5em 0 0.5em 0; line-height: 2;',
+		'h2' => 'font-family: \'Segoe UI\', Tahoma, Geneva, Verdana, sans-serif; font-size: 28px; font-weight: 600; color: #222; margin: 1.5em 0 0.5em 0; line-height: 2;',
+		'h3' => 'font-family: \'Segoe UI\', Tahoma, Geneva, Verdana, sans-serif; font-size: 24px; font-weight: 500; color: #222; margin: 1.5em 0 0.5em 0; line-height: 2;',
+		'ul, ol' => 'margin: 0 0 1.2em 1.5em; padding: 0; font-family: Georgia, \'Times New Roman\', Times, serif; font-size: 18px; line-height: 2; color: #333;',
+		'li' => 'margin: 0 0 0.5em 0; line-height: 2;',
+		'a' => 'color: #0066cc; text-decoration: underline;',
+		'img' => 'max-width: 100%; height: auto; display: block; margin: 1em auto; border-radius: 6px;',
+		'blockquote' => 'border-left: 4px solid #ccc; padding-left: 1em; color: #666; font-style: italic; margin: 1.5em 0; font-family: Georgia, \'Times New Roman\', Times, serif; font-size: 18px;'
+	);
+
+	// Parse the content using DOMDocument to apply inline styles
+	$doc = new DOMDocument();
+	libxml_use_internal_errors(true); // Suppress warnings for malformed HTML
+	$doc->loadHTML('<?xml encoding="UTF-8">' . $content); // Ensure UTF-8 encoding
+	$xpath = new DOMXPath($doc);
+
+	foreach ($inline_styles as $tag => $styles) {
+		$elements = $xpath->query("//{$tag}");
+		foreach ($elements as $element) {
+			$existing_style = $element->getAttribute('style');
+			$element->setAttribute('style', $existing_style ? $existing_style . ';' . $styles : $styles);
+		}
+	}
+
+	// Extract the body content
+	$body = '';
+	foreach ($doc->getElementsByTagName('body')->item(0)->childNodes as $node) {
+		$body .= $doc->saveHTML($node);
+	}
+
+	return $body;
+}
+
 // Send campaign emails
 function emaily_send_campaign($campaign_id) {
 	// Check global lock to prevent concurrent sending
@@ -46,7 +84,7 @@ function emaily_send_campaign($campaign_id) {
 
 	// Fetch recipients only if queue is not initialized (first run)
 	if (!is_array($email_queue) || empty($email_queue)) {
-		$recipients = emaily_get_recipients_from_lists( $campaign_id );
+		$recipients = emaily_get_recipients_from_lists($campaign_id);
 		if (empty($recipients)) {
 			emaily_log($campaign_id, "No recipients found for campaign.");
 			update_post_meta($campaign_id, 'emaily_campaign_all_emails_sent', true);
@@ -75,6 +113,9 @@ function emaily_send_campaign($campaign_id) {
 	$subject = $post->post_title;
 	$preheader = carbon_get_post_meta($campaign_id, 'emaily_preheader');
 	$content = apply_filters('the_content', $post->post_content); // Process Gutenberg content
+
+	// Inline CSS for the content
+	$content = emaily_inline_css($content);
 
 	// Prepare email headers
 	$from_email = carbon_get_post_meta($campaign_id, 'emaily_sender_email');
@@ -127,87 +168,36 @@ function emaily_send_campaign($campaign_id) {
 		// Combine preheader and content
 		$email_content = '';
 		if ($preheader) {
-			$email_content .= '<p style="margin-bottom: 10px;">' . esc_html($preheader) . '</p>';
+			$email_content .= '<p style="margin: 0 0 10px 0; font-family: Georgia, \'Times New Roman\', Times, serif; font-size: 16px; color: #555;">' . esc_html($preheader) . '</p>';
 		}
 
+		// Wrap content in a table for better email client compatibility
 		ob_start();
 		?>
-		<style>
-            .email_content {
-                font-family: Georgia, 'Times New Roman', Times, serif;
-                font-size: 18px;
-                line-height: 2;
-                color: #333;
-                background-color: #ffffff;
-                padding: 24px;
-                max-width: 700px;
-                margin: 0 auto;
-            }
-
-            .email_content h1,
-            .email_content h2,
-            .email_content h3 {
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                color: #222;
-                margin-top: 1.5em;
-                margin-bottom: 0.5em;
-                line-height: 2;
-            }
-
-            .email_content h1 {
-                font-size: 32px;
-                font-weight: 700;
-            }
-
-            .email_content h2 {
-                font-size: 28px;
-                font-weight: 600;
-            }
-
-            .email_content h3 {
-                font-size: 24px;
-                font-weight: 500;
-            }
-
-            .email_content p {
-                margin-bottom: 1.2em;
-            }
-
-            .email_content ul,
-            .email_content ol {
-                margin-left: 1.5em;
-                margin-bottom: 1.2em;
-            }
-
-            .email_content li {
-                margin-bottom: 0.5em;
-                line-height: 2;
-            }
-
-            .email_content img {
-                max-width: 100%;
-                height: auto;
-                display: block;
-                margin: 1em auto;
-                border-radius: 6px;
-            }
-
-            .email_content a {
-                color: #0066cc;
-                text-decoration: underline;
-            }
-
-            .email_content blockquote {
-                border-left: 4px solid #ccc;
-                padding-left: 1em;
-                color: #666;
-                font-style: italic;
-                margin: 1.5em 0;
-            }
-		</style>
+		<!DOCTYPE html>
+		<html>
+		<head>
+			<meta charset="UTF-8">
+			<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		</head>
+		<body style="margin: 0; padding: 0; background-color: #f4f4f4; font-family: Georgia, 'Times New Roman', Times, serif;">
+		<table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f4f4f4; padding: 20px;">
+			<tr>
+				<td align="center">
+					<table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 700px; background-color: #ffffff; border-radius: 8px; overflow: hidden;">
+						<tr>
+							<td style="padding: 24px;">
+								<div class="email_content"><?php echo $personalized_content; ?></div>
+							</td>
+						</tr>
+					</table>
+				</td>
+			</tr>
+		</table>
+		</body>
+		</html>
 		<?php
-		$style = ob_get_clean();
-		$email_content .= $style . '<div class="email_content">' . $personalized_content . '</div>';
+		$email_content .= ob_get_clean();
 
 		// Generate tracking pixel
 		$token = wp_hash("emaily_track_{$campaign_id}_{$email}", 'emaily_track');
@@ -217,7 +207,7 @@ function emaily_send_campaign($campaign_id) {
 			'email'       => urlencode($email),
 			'token'       => $token,
 		), home_url('/'));
-		$tracking_pixel = '<img src="' . esc_url($tracking_url) . '" width="1" height="1" alt="" />';
+		$tracking_pixel = '<img src="' . esc_url($tracking_url) . '" width="1" height="1" alt="" style="display: block;" />';
 
 		// Append tracking pixel to content
 		$email_content .= $tracking_pixel;
