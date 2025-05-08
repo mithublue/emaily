@@ -33,6 +33,24 @@ function emaily_generate_placeholders() {
 	return $field_names;
 }
 
+if ( !function_exists('logger') ) {
+	function logger($key, $value) {
+		update_post_meta(1, $key, $value );
+	}
+}
+
+if ( !function_exists( 'get_logger' ) ) {
+	function get_logger($key) {
+		return get_post_meta(1,$key,true);
+	}
+}
+
+if ( !function_exists('pri' ) ) {
+	function pri( $data ) {
+		echo '<pre>';print_r($data);echo '</pre>';
+	}
+}
+
 function emaily_get_recipients_from_lists( $campaign_id ) {
 	//get recipients from the contact lists
 	$contact_lists = carbon_get_post_meta( $campaign_id, 'emaily_campaign_lists' );
