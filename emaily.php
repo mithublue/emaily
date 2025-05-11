@@ -166,7 +166,13 @@ function emaily_campaign_opens_metabox($post) {
 				<tbody>
 				<?php foreach ($opened_emails as $email => $data) : ?>
 					<tr>
-						<td><?php echo esc_html($email); ?></td>
+						<td><?php
+							$user = get_user_by('email',$email);
+							if ( !is_wp_error( $user ) ) {
+								echo esc_html( $user->display_name );
+								echo ' | ' . esc_html( '(' . $email . ')' );
+							}
+							?></td>
 						<td><?php echo esc_html($data['count']); ?></td>
 						<td>
 							<?php
