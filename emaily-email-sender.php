@@ -168,7 +168,7 @@ function emaily_send_campaign($campaign_id) {
 		// Combine preheader and content
 		$email_content = '';
 		if ($preheader) {
-			$email_content .= '<p style="margin: 0 0 10px 0; font-family: Georgia, \'Times New Roman\', Times, serif; font-size: 16px; color: #555;">' . esc_html($preheader) . '</p>';
+			$email_content .= '<p style="margin: 0 0 10px 0; font-family: Georgia, \'Times New Roman\', Times, serif; font-size: 18px; color: #555;">' . esc_html($preheader) . '</p>';
 		}
 
 		// Wrap content in a table for better email client compatibility
