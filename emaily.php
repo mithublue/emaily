@@ -178,10 +178,10 @@ function emaily_campaign_opens_metabox($post) {
 							<?php
 							if (is_array($data['timestamps'])) {
 								echo esc_html(implode(', ', array_map(function($ts) {
-									return date_i18n('Y-m-d H:i:s', strtotime($ts));
+									return date_i18n('Y-m-d g:i A', strtotime($ts));
 								}, $data['timestamps'])));
 							} else {
-								echo esc_html(date_i18n('Y-m-d H:i:s', strtotime($data['timestamps'])));
+								echo esc_html(date_i18n('Y-m-d g:i A', strtotime($data['timestamps'])));
 							}
 							?>
 						</td>
@@ -638,16 +638,16 @@ function emaily_handle_verification() {
 	if (carbon_get_theme_option('emaily_slack_notify_subscription')) {
 		$name = $user->display_name ?: $user->user_email;
 		$email = $user->user_email;
-		$timestamp = date_i18n('Y-m-d H:i:s', current_time('timestamp'));
+		$timestamp = date_i18n('Y-m-d g:i A', current_time('timestamp'));
 		$subscriber_count = emaily_get_subscriber_count();
 		$message = sprintf(
-			"New subscription!\nName: %s\nEmail: %s\nTime: %s\nTotal Subscribers: %d",
+			"Name: %s\nEmail: %s\nTime: %s\nTotal Subscribers: %d",
 			$name,
 			$email,
 			$timestamp,
 			$subscriber_count
 		);
-		emaily_send_slack_message($message);
+		emaily_send_slack_message("New Subscription", $message);
 	}
 
 	wp_redirect(add_query_arg('emaily_verification_status', 'success', $confirmation_page_url));
@@ -719,15 +719,15 @@ function emaily_daily_campaign_summary() {
 	$open_rate = $sent_count > 0 ? number_format(($opened_count / $sent_count) * 100, 2) : 0;
 
 	$message = sprintf(
-		"Daily Campaign Summary\nCampaign: %s\nSent: %d\nUnique Opens: %d\nOpen Rate: %s%%\nLast Updated: %s",
+		"Campaign: %s\nSent: %d\nUnique Opens: %d\nOpen Rate: %s%%\nLast Updated: %s",
 		$campaign->post_title,
 		$sent_count,
 		$opened_count,
 		$open_rate,
-		date_i18n('Y-m-d H:i:s', get_post_modified_time('U', false, $campaign))
+		date_i18n('Y-m-d g:i A', get_post_modified_time('U', false, $campaign))
 	);
 
-	emaily_send_slack_message($message);
+	emaily_send_slack_message("Daily Campaign Summary", $message, true);
 }
 add_action('emaily_daily_campaign_summary', 'emaily_daily_campaign_summary');
 
@@ -839,7 +839,7 @@ function emaily_handle_tracking() {
 	if (carbon_get_theme_option('emaily_slack_notify_email_open')) {
 		$user = get_user_by('email', $email);
 		$name = $user ? ($user->display_name ?: $email) : $email;
-		$timestamp = date_i18n('Y-m-d H:i:s', current_time('timestamp'));
+		$timestamp = date_i18n('Y-m-d g:i A', current_time('timestamp'));
 		$sent = get_post_meta($campaign_id, 'emaily_campaign_sent_emails', true);
 		$opened = get_post_meta($campaign_id, 'emaily_campaign_opened_emails', true);
 		$sent_count = is_array($sent) ? count($sent) : 0;
@@ -847,14 +847,14 @@ function emaily_handle_tracking() {
 		$open_rate = $sent_count > 0 ? number_format(($opened_count / $sent_count) * 100, 2) : 0;
 
 		$message = sprintf(
-			"Email Opened\nCampaign: %s\nUser: %s (%s)\nTime: %s\nOpen Rate: %s%%",
+			"Campaign: %s\nUser: %s (%s)\nTime: %s\nOpen Rate: %s%%",
 			$post->post_title,
 			$name,
 			$email,
 			$timestamp,
 			$open_rate
 		);
-		emaily_send_slack_message($message);
+		emaily_send_slack_message("Email Opened", $message);
 	}
 
 	header('Content-Type: image/png');

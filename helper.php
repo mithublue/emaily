@@ -69,15 +69,28 @@ function emaily_get_recipients_from_lists($campaign_id) {
 	return $recipients;
 }
 
-// Send message to Slack
-function emaily_send_slack_message($message) {
+// Send message to Slack using block kit
+function emaily_send_slack_message($title, $message, $include_dashboard_url = false) {
 	$webhook_url = carbon_get_theme_option('emaily_slack_webhook_url');
 	if (empty($webhook_url)) {
 		return false;
 	}
 
+	$dashboard_url = $include_dashboard_url ? admin_url('admin.php?page=emaily-campaigns-dashboard') : '';
+
 	$payload = array(
-		'text' => $message,
+		'blocks' => array(
+			array(
+				'type' => 'divider', // Black border at the top
+			),
+			array(
+				'type' => 'section',
+				'text' => array(
+					'type' => 'mrkdwn',
+					'text' => "*{$title}*\n{$message}" . ($dashboard_url ? "\n<{$dashboard_url}|View Campaign Dashboard>" : ''),
+				),
+			),
+		),
 	);
 
 	$response = wp_remote_post($webhook_url, array(
