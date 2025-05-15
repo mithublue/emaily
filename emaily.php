@@ -167,10 +167,10 @@ function emaily_campaign_opens_metabox($post) {
 				<?php foreach ($opened_emails as $email => $data) : ?>
 					<tr>
 						<td><?php
-							$user = get_user_by('email',$email);
-							if ( !is_wp_error( $user ) ) {
-								echo esc_html( $user->display_name );
-								echo ' | ' . esc_html( '(' . $email . ')' );
+							$user = get_user_by('email', $email);
+							if (!is_wp_error($user)) {
+								echo esc_html($user->display_name);
+								echo ' | ' . esc_html('(' . $email . ')');
 							}
 							?></td>
 						<td><?php echo esc_html($data['count']); ?></td>
@@ -360,7 +360,7 @@ function emaily_import_users() {
 		if (email_exists($email)) {
 			$skip_count++;
 			$user_emails[] = $email;
-			$user_id = get_user_by( 'email', $email )->ID;
+			$user_id = get_user_by('email', $email)->ID;
 		} else {
 			$user_id = wp_insert_user(array(
 				'user_login'   => sanitize_user($username = sanitize_user(explode('@', $email)[0]), true),
@@ -381,7 +381,7 @@ function emaily_import_users() {
 				continue;
 			}
 
-			if ( $field == '.' ) {
+			if ($field == '.') {
 				$fieldname = 'gender';
 			} else {
 				$fieldname = $field;
@@ -391,7 +391,7 @@ function emaily_import_users() {
 		}
 
 		//make user verified
-		update_user_meta($user_id, 'emaily_verification_status', 'verified' );
+		update_user_meta($user_id, 'emaily_verification_status', 'verified');
 
 		$user_emails[] = $email;
 		$success_count++;
@@ -473,7 +473,7 @@ function emaily_handle_form_submission() {
 
 	$fields = get_post_meta($form_id, 'emaily_form_fields', true);
 	$fields = is_array($fields) ? $fields : array();
-	$fields = apply_filters( 'emaily_subscription_form_fields', $fields, $form_id, $_POST );
+	$fields = apply_filters('emaily_subscription_form_fields', $fields, $form_id, $_POST);
 	if (empty($fields) || !in_array('Email', $fields)) {
 		wp_send_json_error(array('message' => __('Form configuration error: Email field is required.', 'emaily')));
 	}
@@ -634,6 +634,22 @@ function emaily_handle_verification() {
 	}
 	delete_user_meta($user_id, 'emaily_contact_lists');
 
+	// Send Slack notification for subscription
+	if (carbon_get_theme_option('emaily_slack_notify_subscription')) {
+		$name = $user->display_name ?: $user->user_email;
+		$email = $user->user_email;
+		$timestamp = date_i18n('Y-m-d H:i:s', current_time('timestamp'));
+		$subscriber_count = emaily_get_subscriber_count();
+		$message = sprintf(
+			"New subscription!\nName: %s\nEmail: %s\nTime: %s\nTotal Subscribers: %d",
+			$name,
+			$email,
+			$timestamp,
+			$subscriber_count
+		);
+		emaily_send_slack_message($message);
+	}
+
 	wp_redirect(add_query_arg('emaily_verification_status', 'success', $confirmation_page_url));
 	exit;
 }
@@ -649,7 +665,7 @@ add_action('wp', 'emaily_schedule_cleanup');
 
 // Cleanup unverified users
 function emaily_cleanup_unverified_users() {
-	$users    = get_users(array(
+	$users = get_users(array(
 		'meta_key'     => 'emaily_verification_status',
 		'meta_value'   => 'pending',
 		'meta_compare' => '=',
@@ -664,6 +680,56 @@ function emaily_cleanup_unverified_users() {
 	}
 }
 add_action('emaily_cleanup_unverified_users', 'emaily_cleanup_unverified_users');
+
+// Schedule cron job for daily campaign summary
+function emaily_schedule_daily_summary() {
+	if (!wp_next_scheduled('emaily_daily_campaign_summary')) {
+		wp_schedule_event(time(), 'twicedaily', 'emaily_daily_campaign_summary');
+	}
+}
+add_action('wp', 'emaily_schedule_daily_summary');
+
+// Handle daily campaign summary
+function emaily_daily_campaign_summary() {
+	if (!carbon_get_theme_option('emaily_slack_notify_daily_summary')) {
+		return;
+	}
+
+	$args = array(
+		'post_type'      => 'emaily_campaign',
+		'post_status'    => 'publish',
+		'posts_per_page' => 1,
+		'meta_key'       => 'emaily_campaign_status',
+		'meta_value'     => 'completed',
+		'orderby'        => 'modified',
+		'order'          => 'DESC',
+	);
+
+	$query = new WP_Query($args);
+	if (!$query->have_posts()) {
+		return;
+	}
+
+	$campaign = $query->posts[0];
+	$campaign_id = $campaign->ID;
+	$sent = get_post_meta($campaign_id, 'emaily_campaign_sent_emails', true);
+	$opened = get_post_meta($campaign_id, 'emaily_campaign_opened_emails', true);
+	$sent_count = is_array($sent) ? count($sent) : 0;
+	$opened_count = is_array($opened) ? count($opened) : 0;
+	$open_rate = $sent_count > 0 ? number_format(($opened_count / $sent_count) * 100, 2) : 0;
+
+	$message = sprintf(
+		"Daily Campaign Summary\nCampaign: %s\nSent: %d\nUnique Opens: %d\nOpen Rate: %s%%\nLast Updated: %s",
+		$campaign->post_title,
+		$sent_count,
+		$opened_count,
+		$open_rate,
+		date_i18n('Y-m-d H:i:s', get_post_modified_time('U', false, $campaign))
+	);
+
+	emaily_send_slack_message($message);
+}
+add_action('emaily_daily_campaign_summary', 'emaily_daily_campaign_summary');
 
 // Add Audience Count column to email_contact_list
 function emaily_contact_list_columns($columns) {
@@ -769,6 +835,28 @@ function emaily_handle_tracking() {
 	update_post_meta($campaign_id, 'emaily_campaign_opened_emails', $opened_emails);
 	emaily_log($campaign_id, "Email opened by $email (Count: {$opened_emails[$email]['count']})");
 
+	// Send Slack notification for email open
+	if (carbon_get_theme_option('emaily_slack_notify_email_open')) {
+		$user = get_user_by('email', $email);
+		$name = $user ? ($user->display_name ?: $email) : $email;
+		$timestamp = date_i18n('Y-m-d H:i:s', current_time('timestamp'));
+		$sent = get_post_meta($campaign_id, 'emaily_campaign_sent_emails', true);
+		$opened = get_post_meta($campaign_id, 'emaily_campaign_opened_emails', true);
+		$sent_count = is_array($sent) ? count($sent) : 0;
+		$opened_count = is_array($opened) ? count($opened) : 0;
+		$open_rate = $sent_count > 0 ? number_format(($opened_count / $sent_count) * 100, 2) : 0;
+
+		$message = sprintf(
+			"Email Opened\nCampaign: %s\nUser: %s (%s)\nTime: %s\nOpen Rate: %s%%",
+			$post->post_title,
+			$name,
+			$email,
+			$timestamp,
+			$open_rate
+		);
+		emaily_send_slack_message($message);
+	}
+
 	header('Content-Type: image/png');
 	echo base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=');
 	wp_die();
@@ -787,6 +875,12 @@ function emaily_deactivate() {
 	$timestamp = wp_next_scheduled('emaily_cleanup_unverified_users');
 	if ($timestamp) {
 		wp_unschedule_event($timestamp, 'emaily_cleanup_unverified_users');
+	}
+
+	// Clear daily summary cron
+	$timestamp = wp_next_scheduled('emaily_daily_campaign_summary');
+	if ($timestamp) {
+		wp_unschedule_event($timestamp, 'emaily_daily_campaign_summary');
 	}
 
 	// Clear all emaily_send_campaign_{$post_id} events

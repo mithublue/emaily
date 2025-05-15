@@ -246,6 +246,18 @@ function emaily_send_campaign($campaign_id) {
 		update_post_meta($campaign_id, 'emaily_campaign_status', 'completed');
 		delete_post_meta($campaign_id, 'emaily_campaign_email_queue');
 		emaily_log($campaign_id, "All emails sent for campaign.");
+
+		// Send Slack notification for campaign completion
+		if (carbon_get_theme_option('emaily_slack_notify_campaign_complete')) {
+			$sent_count = count($sent_emails);
+			$message = sprintf(
+				"Campaign Completed\nCampaign: %s\nSent to: %d recipients\nCompleted at: %s",
+				$post->post_title,
+				$sent_count,
+				date_i18n('Y-m-d H:i:s', current_time('timestamp'))
+			);
+			emaily_send_slack_message($message);
+		}
 	} else {
 		// Update queue with remaining emails
 		update_post_meta($campaign_id, 'emaily_campaign_email_queue', array_values($remaining_emails));

@@ -38,6 +38,22 @@ function emaily_settings_fields() {
 		         Field::make('checkbox', 'emaily_enable_honeypot', __('Enable Honeypot', 'emaily'))
 		              ->set_default_value(true)
 		              ->set_help_text(__('Enable honeypot field to trap bots.', 'emaily')),
+	         ))
+	         ->add_tab(__('Slack Integration', 'emaily'), array(
+		         Field::make('text', 'emaily_slack_webhook_url', __('Slack Webhook URL', 'emaily'))
+		              ->set_help_text(__('Enter the Slack webhook URL for sending notifications. Obtain it from your Slack workspace.', 'emaily')),
+		         Field::make('checkbox', 'emaily_slack_notify_subscription', __('Notify on Subscription', 'emaily'))
+		              ->set_default_value(true)
+		              ->set_help_text(__('Send a Slack notification when a user subscribes.', 'emaily')),
+		         Field::make('checkbox', 'emaily_slack_notify_email_open', __('Notify on Email Open', 'emaily'))
+		              ->set_default_value(true)
+		              ->set_help_text(__('Send a Slack notification when a campaign email is opened.', 'emaily')),
+		         Field::make('checkbox', 'emaily_slack_notify_campaign_complete', __('Notify on Campaign Completion', 'emaily'))
+		              ->set_default_value(true)
+		              ->set_help_text(__('Send a Slack notification when a campaign finishes sending.', 'emaily')),
+		         Field::make('checkbox', 'emaily_slack_notify_daily_summary', __('Notify Daily Campaign Summary', 'emaily'))
+		              ->set_default_value(true)
+		              ->set_help_text(__('Send a twice-daily summary of the last sent campaign’s stats.', 'emaily')),
 	         ));
 }
 
