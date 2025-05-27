@@ -29,6 +29,7 @@ class Emaily_Campaigns_Table extends WP_List_Table {
 			'opened_emails'   => __('Opened Emails', 'emaily'),
 			'open_rate'       => __('Open Rate', 'emaily'),
 			'scheduled_start' => __('Scheduled Start', 'emaily'),
+			'campaign_start_time' => __('Campaign Start Time', 'emaily'), // New column
 		);
 	}
 
@@ -71,6 +72,9 @@ class Emaily_Campaigns_Table extends WP_List_Table {
 			case 'scheduled_start':
 				$start_time = get_post_meta($item->ID, 'emaily_campaign_start_time', true);
 				return esc_html($start_time ? $start_time : 'N/A');
+			case 'campaign_start_time':
+				$start_time = carbon_get_post_meta($item->ID, 'emaily_campaign_schedule');
+				return esc_html($start_time ? $start_time : 'Not Scheduled');
 			default:
 				return '';
 		}

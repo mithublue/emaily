@@ -752,6 +752,7 @@ function emaily_campaign_columns($columns) {
 	$columns['campaign_status'] = __('Campaign Status', 'emaily');
 	$columns['open_rate'] = __('Open Rate', 'emaily');
 	$columns['unique_opens'] = __('Unique Opens', 'emaily');
+	$columns['campaign_start_time'] = __('Campaign Start Time', 'emaily');
 	return $columns;
 }
 add_filter('manage_emaily_campaign_posts_columns', 'emaily_campaign_columns');
@@ -777,6 +778,10 @@ function emaily_campaign_column_data($column, $post_id) {
 		$opened = get_post_meta($post_id, 'emaily_campaign_opened_emails', true);
 		$unique_opens = is_array($opened) ? count($opened) : 0;
 		echo esc_html($unique_opens);
+	}
+	if ($column === 'campaign_start_time') {
+		$start_time = carbon_get_post_meta($post_id, 'emaily_campaign_schedule');
+		echo esc_html($start_time ? $start_time : __('Not Scheduled', 'emaily'));
 	}
 }
 add_action('manage_emaily_campaign_posts_custom_column', 'emaily_campaign_column_data', 10, 2);
