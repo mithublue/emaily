@@ -492,35 +492,47 @@ function emaily_handle_form_submission() {
 		wp_send_json_error(array('message' => __('Please enter a valid email address.', 'emaily')));
 	}
 
-	if (email_exists($email)) {
-		$user = get_user_by('email', $email);
-		$status = get_user_meta($user->ID, 'emaily_verification_status', true);
-		if ($status === 'verified') {
-			wp_send_json_error(array('message' => __('This email is already subscribed.', 'emaily')));
-		} else {
-			// Delete the pending user and allow resubscription
-			wp_delete_user($user->ID);
-		}
-	}
+	$existing_user = get_user_by('email', $email);
+	$existing_user_id = $existing_user ? $existing_user->ID : 0;
 
 	$name = isset($_POST['emaily_name']) ? sanitize_text_field($_POST['emaily_name']) : '';
 	if (in_array('Name', $fields) && empty($name)) {
 		wp_send_json_error(array('message' => __('Name is required.', 'emaily')));
 	}
 
-	$user_id = wp_insert_user(array(
-		'user_login'   => sanitize_user($username = sanitize_user(explode('@', $email)[0]), true),
-		'user_email'   => $email,
-		'display_name' => $name ?: $email,
-		'role'         => 'subscriber',
-		'user_pass'    => wp_generate_password(),
-	));
+	if (!$existing_user_id) {
+		$user_id = wp_insert_user(array(
+			'user_login'   => sanitize_user($username = sanitize_user(explode('@', $email)[0]), true),
+			'user_email'   => $email,
+			'display_name' => $name ?: $email,
+			'role'         => 'subscriber',
+			'user_pass'    => wp_generate_password(),
+		));
 
-	if (is_wp_error($user_id)) {
-		wp_send_json_error(array('message' => __('Failed to subscribe: ') . $user_id->get_error_message()));
+		if (is_wp_error($user_id)) {
+			wp_send_json_error(array('message' => __('Failed to subscribe: ') . $user_id->get_error_message()));
+		}
+	} else {
+		$user_id = $existing_user_id;
 	}
 
-	// Store additional fields as user meta
+	$lists_with_existing_email = array();
+	$lists_to_add = array();
+	foreach ($lists as $list_id) {
+		$list_users = get_post_meta($list_id, 'email_contact_list_users', true);
+		$list_users = is_array($list_users) ? $list_users : array();
+		if (in_array($email, $list_users, true)) {
+			$lists_with_existing_email[] = $list_id;
+		} else {
+			$lists_to_add[$list_id] = $list_users;
+		}
+	}
+
+	if (!empty($lists_with_existing_email)) {
+		wp_send_json_error(array('message' => __('This email is already subscribed.', 'emaily')));
+	}
+
+	// Store additional fields as user meta for new or existing users
 	foreach ($fields as $field) {
 		if ($field === 'Email' || $field === 'Name') {
 			continue;
@@ -532,13 +544,13 @@ function emaily_handle_form_submission() {
 		}
 	}
 
-	if ($send_verification) {
+	if (!$existing_user_id && $send_verification) {
 		// Store verification data
 		$token = wp_generate_uuid4();
 		update_user_meta($user_id, 'emaily_verification_status', 'pending');
 		update_user_meta($user_id, 'emaily_verification_token', $token);
 		update_user_meta($user_id, 'emaily_subscription_time', current_time('timestamp'));
-		update_user_meta($user_id, 'emaily_contact_lists', $lists);
+		update_user_meta($user_id, 'emaily_contact_lists', array_keys($lists_to_add));
 
 		// Send verification email
 		$verification_link = add_query_arg(
@@ -574,18 +586,15 @@ function emaily_handle_form_submission() {
 		wp_send_json_success(array('message' => $submission_message));
 	}
 
+	// No verification required or existing user: mark as verified and add to lists
 	update_user_meta($user_id, 'emaily_verification_status', 'verified');
 	delete_user_meta($user_id, 'emaily_verification_token');
 	delete_user_meta($user_id, 'emaily_subscription_time');
 	delete_user_meta($user_id, 'emaily_contact_lists');
 
-	foreach ($lists as $list_id) {
-		$list_users = get_post_meta($list_id, 'email_contact_list_users', true);
-		$list_users = is_array($list_users) ? $list_users : array();
-		if (!in_array($email, $list_users, true)) {
-			$list_users[] = $email;
-			update_post_meta($list_id, 'email_contact_list_users', $list_users);
-		}
+	foreach ($lists_to_add as $list_id => $list_users) {
+		$list_users[] = $email;
+		update_post_meta($list_id, 'email_contact_list_users', $list_users);
 	}
 
 	if (carbon_get_theme_option('emaily_slack_notify_subscription')) {
