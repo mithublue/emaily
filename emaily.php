@@ -471,6 +471,9 @@ function emaily_handle_form_submission() {
 		wp_send_json_error(array('message' => __('Invalid form ID.', 'emaily')));
 	}
 
+	$send_verification_meta = get_post_meta($form_id, 'emaily_form_send_verification', true);
+	$send_verification = $send_verification_meta === '' ? true : ($send_verification_meta === '1');
+
 	$fields = get_post_meta($form_id, 'emaily_form_fields', true);
 	$fields = is_array($fields) ? $fields : array();
 	$fields = apply_filters('emaily_subscription_form_fields', $fields, $form_id, $_POST);
@@ -529,44 +532,81 @@ function emaily_handle_form_submission() {
 		}
 	}
 
-	// Store verification data
-	$token = wp_generate_uuid4();
-	update_user_meta($user_id, 'emaily_verification_status', 'pending');
-	update_user_meta($user_id, 'emaily_verification_token', $token);
-	update_user_meta($user_id, 'emaily_subscription_time', current_time('timestamp'));
-	update_user_meta($user_id, 'emaily_contact_lists', $lists);
+	if ($send_verification) {
+		// Store verification data
+		$token = wp_generate_uuid4();
+		update_user_meta($user_id, 'emaily_verification_status', 'pending');
+		update_user_meta($user_id, 'emaily_verification_token', $token);
+		update_user_meta($user_id, 'emaily_subscription_time', current_time('timestamp'));
+		update_user_meta($user_id, 'emaily_contact_lists', $lists);
 
-	// Send verification email
-	$verification_link = add_query_arg(
-		array(
-			'emaily_verify' => '1',
-			'user_id'       => $user_id,
-			'token'         => $token,
-		),
-		home_url('/')
-	);
+		// Send verification email
+		$verification_link = add_query_arg(
+			array(
+				'emaily_verify' => '1',
+				'user_id'       => $user_id,
+				'token'         => $token,
+			),
+			home_url('/')
+		);
 
-	$subject = __('Verify Your Subscription', 'emaily');
-	$message = sprintf(
-		__('Hello %s,') . "\n\n" .
-		__('Thank you for subscribing! Please verify your email address by clicking the link below:') . "\n\n" .
-		__('%s') . "\n\n" .
-		__('This link will expire in 24 hours. If you did not request this subscription, please ignore this email.') . "\n\n" .
-		__('Best regards,') . "\n" .
-		__('The Emaily Team'),
-		$name ?: $email,
-		$verification_link
-	);
+		$subject = __('Verify Your Subscription', 'emaily');
+		$message = sprintf(
+			__('Hello %s,') . "\n\n" .
+			__('Thank you for subscribing! Please verify your email address by clicking the link below:') . "\n\n" .
+			__('%s') . "\n\n" .
+			__('This link will expire in 24 hours. If you did not request this subscription, please ignore this email.') . "\n\n" .
+			__('Best regards,') . "\n" .
+			__('The Emaily Team'),
+			$name ?: $email,
+			$verification_link
+		);
 
-	$headers = array('Content-Type: text/plain; charset=UTF-8');
-	$sent = wp_mail($email, $subject, $message, $headers);
+		$headers = array('Content-Type: text/plain; charset=UTF-8');
+		$sent = wp_mail($email, $subject, $message, $headers);
 
-	if (!$sent) {
-		wp_delete_user($user_id);
-		wp_send_json_error(array('message' => __('Failed to send verification email. Please try again.', 'emaily')));
+		if (!$sent) {
+			wp_delete_user($user_id);
+			wp_send_json_error(array('message' => __('Failed to send verification email. Please try again.', 'emaily')));
+		}
+
+		$submission_message = carbon_get_theme_option('emaily_form_submission_message') ?: __('Please check your email to verify your subscription.', 'emaily');
+		wp_send_json_success(array('message' => $submission_message));
 	}
 
-	$submission_message = carbon_get_theme_option('emaily_form_submission_message') ?: __('Please check your email to verify your subscription.', 'emaily');
+	update_user_meta($user_id, 'emaily_verification_status', 'verified');
+	delete_user_meta($user_id, 'emaily_verification_token');
+	delete_user_meta($user_id, 'emaily_subscription_time');
+	delete_user_meta($user_id, 'emaily_contact_lists');
+
+	foreach ($lists as $list_id) {
+		$list_users = get_post_meta($list_id, 'email_contact_list_users', true);
+		$list_users = is_array($list_users) ? $list_users : array();
+		if (!in_array($email, $list_users, true)) {
+			$list_users[] = $email;
+			update_post_meta($list_id, 'email_contact_list_users', $list_users);
+		}
+	}
+
+	if (carbon_get_theme_option('emaily_slack_notify_subscription')) {
+		$subscriber_name = $name ?: $email;
+		$timestamp = date_i18n('Y-m-d g:i A', current_time('timestamp'));
+		$subscriber_count = emaily_get_subscriber_count();
+		$slack_message = sprintf(
+			"Name: %s\nEmail: %s\nTime: %s\nTotal Subscribers: %d",
+			$subscriber_name,
+			$email,
+			$timestamp,
+			$subscriber_count
+		);
+		emaily_send_slack_message('New Subscription', $slack_message);
+	}
+
+	$submission_message = carbon_get_theme_option('emaily_form_submission_message');
+	if (!$submission_message) {
+		$submission_message = __('You have been subscribed successfully.', 'emaily');
+	}
+
 	wp_send_json_success(array('message' => $submission_message));
 }
 add_action('wp_ajax_emaily_form_submit', 'emaily_handle_form_submission');

@@ -66,6 +66,14 @@ function emaily_add_form_metaboxes() {
 		'high'
 	);
 	add_meta_box(
+		'emaily_form_verification',
+		__('Email Verification', 'emaily'),
+		'emaily_form_verification_metabox',
+		'emaily_form',
+		'side',
+		'high'
+	);
+	add_meta_box(
 		'emaily_form_type',
 		__('Form Type', 'emaily'),
 		'emaily_form_type_metabox',
@@ -107,6 +115,24 @@ function emaily_form_builder_metabox($post) {
 				</div>
 			<?php endforeach; ?>
 		</div>
+	</div>
+	<?php
+}
+
+// Render verification settings metabox
+function emaily_form_verification_metabox($post) {
+	wp_nonce_field('emaily_form_verification_nonce', 'emaily_form_verification_nonce');
+	$send_verification = get_post_meta($post->ID, 'emaily_form_send_verification', true);
+	$is_checked = $send_verification === '' ? true : ($send_verification === '1');
+	?>
+	<div id="emaily-form-verification-metabox">
+		<label>
+			<input type="checkbox" name="emaily_form_send_verification" value="1" <?php checked($is_checked); ?> />
+			<?php esc_html_e('Send email verification mail', 'emaily'); ?>
+		</label>
+		<p class="description">
+			<?php esc_html_e('Require subscribers to confirm their email address before being added to lists.', 'emaily'); ?>
+		</p>
 	</div>
 	<?php
 }
@@ -235,6 +261,12 @@ function emaily_save_form_settings($post_id) {
 	if (isset($_POST['emaily_form_type_nonce']) && wp_verify_nonce($_POST['emaily_form_type_nonce'], 'emaily_form_type_nonce')) {
 		$form_type = isset($_POST['emaily_form_type']) ? sanitize_text_field($_POST['emaily_form_type']) : '';
 		update_post_meta($post_id, 'emaily_form_type', $form_type);
+	}
+
+	// Save verification setting
+	if (isset($_POST['emaily_form_verification_nonce']) && wp_verify_nonce($_POST['emaily_form_verification_nonce'], 'emaily_form_verification_nonce')) {
+		$send_verification = isset($_POST['emaily_form_send_verification']) ? '1' : '0';
+		update_post_meta($post_id, 'emaily_form_send_verification', $send_verification);
 	}
 }
 add_action('save_post_emaily_form', 'emaily_save_form_settings');
