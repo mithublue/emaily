@@ -52,43 +52,57 @@ function emaily_add_email_list_metabox() {
 	);
 }
 
-function emaily_email_list_metabox_callback($post) {
-	$email_list = get_post_meta($post->ID, 'email_contact_list_users', true);
+function emaily_get_email_list_markup($post_id) {
+	$email_list = get_post_meta($post_id, 'email_contact_list_users', true);
 	$email_list = is_array($email_list) ? $email_list : [];
 	$email_count = count($email_list);
+
+	ob_start();
+	?>
+	<p><strong><?php printf(_n('Total Email: %d', 'Total Emails: %d', $email_count, 'emaily'), $email_count); ?></strong></p>
+	<?php if (empty($email_list)) : ?>
+		<p><?php esc_html_e('No emails found in this contact list.', 'emaily'); ?></p>
+	<?php else : ?>
+		<div class="emaily-email-list-controls">
+			<label for="emaily-email-search" class="screen-reader-text"><?php esc_html_e('Search emails', 'emaily'); ?></label>
+			<input type="search" id="emaily-email-search" placeholder="<?php esc_attr_e('Search by email or name…', 'emaily'); ?>" />
+		</div>
+		<table id="emaily-email-table" class="widefat striped">
+			<thead>
+			<tr>
+				<th><?php esc_html_e('Email', 'emaily'); ?></th>
+				<th><?php esc_html_e('Name', 'emaily'); ?></th>
+				<th><?php esc_html_e('Actions', 'emaily'); ?></th>
+			</tr>
+			</thead>
+			<tbody>
+			<?php foreach ($email_list as $email) : ?>
+				<?php
+				$user_data = get_user_by('email', $email);
+				$display_name = ($user_data && !is_wp_error($user_data)) ? $user_data->display_name : '';
+				?>
+				<tr data-email="<?php echo esc_attr($email); ?>">
+					<td class="emaily-email-column"><?php echo esc_html($email); ?></td>
+					<td class="emaily-name-column"><?php echo esc_html($display_name ? $display_name : __('N/A', 'emaily')); ?></td>
+					<td class="emaily-actions-column">
+						<button type="button" class="button-link emaily-remove-email" data-email="<?php echo esc_attr($email); ?>"><?php esc_html_e('Remove', 'emaily'); ?></button>
+					</td>
+				</tr>
+			<?php endforeach; ?>
+			<tr class="emaily-no-results" style="display: none;">
+				<td colspan="3"><?php esc_html_e('No matching entries found.', 'emaily'); ?></td>
+			</tr>
+			</tbody>
+		</table>
+	<?php endif; ?>
+	<?php
+	return ob_get_clean();
+}
+
+function emaily_email_list_metabox_callback($post) {
 	?>
 	<div id="emaily-email-list-content">
-		<p><strong><?php printf(_n('Total Email: %d', 'Total Emails: %d', $email_count, 'emaily'), $email_count); ?></strong></p>
-		<?php if (empty($email_list)): ?>
-			<p><?php _e('No emails found in this contact list.', 'emaily'); ?></p>
-		<?php else: ?>
-			<table class="widefat striped">
-				<thead>
-				<tr>
-					<th><?php _e('Email', 'emaily'); ?></th>
-					<th><?php _e('Name', 'emaily'); ?></th>
-				</tr>
-				</thead>
-				<tbody>
-				<?php foreach ($email_list as $email ): ?>
-					<tr>
-						<td><?php echo esc_html($email); ?></td>
-						<?php
-						$user_data = get_user_by( 'email', $email );
-						?>
-						<td>
-							<?php
-							if ( $user_data  ) {
-								echo esc_html(!empty($user_data->display_name) ? $user_data->display_name : __('N/A', 'emaily'));
-							}
-							?>
-
-						</td>
-					</tr>
-				<?php endforeach; ?>
-				</tbody>
-			</table>
-		<?php endif; ?>
+		<?php echo emaily_get_email_list_markup($post->ID); ?>
 	</div>
 	<?php
 }
@@ -134,19 +148,34 @@ function emaily_enqueue_validate_emails_scripts($hook) {
 		true
 	);
 
+	$current_post_id = 0;
+	if (isset($_GET['post'])) {
+		$current_post_id = intval($_GET['post']);
+	} elseif (isset($_POST['post_ID'])) {
+		$current_post_id = intval($_POST['post_ID']);
+	} else {
+		global $post;
+		if ($post && isset($post->ID)) {
+			$current_post_id = intval($post->ID);
+		}
+	}
+
 	wp_localize_script(
 		'emaily-contact-list',
 		'emailyContactList',
 		[
 			'ajax_url' => admin_url('admin-ajax.php'),
 			'nonce'    => wp_create_nonce('emaily_validate_emails_nonce'),
-			'post_id'  => get_the_ID(),
+			'post_id'  => $current_post_id,
 			'strings'  => [
 				'confirm'        => __('Are you sure you want to validate emails? Invalid or unregistered emails will be removed.', 'emaily'),
-				'error_generic'  => __('An error occurred while validating emails.', 'emaily'),
+				'confirm_remove' => __('Are you sure you want to remove %s from this contact list?', 'emaily'),
+				'error_generic'  => __('An error occurred while processing the request.', 'emaily'),
+				'error_remove'   => __('Failed to remove the email.', 'emaily'),
 			],
 			'actions'  => [
 				'get_email_list' => 'emaily_get_email_list',
+				'remove_email'   => 'emaily_remove_email_from_list',
 			],
 		]
 	);
@@ -239,43 +268,50 @@ function emaily_get_email_list() {
 		wp_send_json_error(__('Contact list not found.', 'emaily'));
 	}
 
-	// Get email list
-	$email_list = get_post_meta($post_id, 'email_contact_list_users', true);
-	$email_list = is_array($email_list) ? $email_list : [];
-	$email_count = count($email_list);
-
-	// Build HTML response
-	ob_start();
-	?>
-	<p><strong><?php printf(_n('Total Email: %d', 'Total Emails: %d', $email_count, 'emaily'), $email_count); ?></strong></p>
-	<?php if (empty($email_list)): ?>
-		<p><?php _e('No emails found in this contact list.', 'emaily'); ?></p>
-	<?php else: ?>
-		<table class="widefat striped">
-			<thead>
-			<tr>
-				<th><?php _e('Email', 'emaily'); ?></th>
-				<th><?php _e('Name', 'emaily'); ?></th>
-			</tr>
-			</thead>
-			<tbody>
-			<?php foreach ($email_list as $k => $email ): ?>
-				<tr>
-					<td><?php echo esc_html($email); ?></td>
-					<td>
-						<?php
-						$user_data = get_user_by( 'email', $email );
-						?>
-						<?php echo esc_html(!empty($user_data['name']) ? $user_data['name'] : __('N/A', 'emaily')); ?></td>
-				</tr>
-			<?php endforeach; ?>
-			</tbody>
-		</table>
-	<?php endif; ?>
-	<?php
-	$html = ob_get_clean();
+	$html = emaily_get_email_list_markup($post_id);
 
 	wp_send_json_success(['html' => $html]);
+}
+
+// AJAX handler for removing a single email
+add_action('wp_ajax_emaily_remove_email_from_list', 'emaily_remove_email_from_list');
+function emaily_remove_email_from_list() {
+	check_ajax_referer('emaily_validate_emails_nonce', 'nonce');
+
+	$post_id = isset($_POST['post_id']) ? intval($_POST['post_id']) : 0;
+	$email = isset($_POST['email']) ? sanitize_email(wp_unslash($_POST['email'])) : '';
+
+	if (!$post_id || get_post_type($post_id) !== 'email_contact_list') {
+		wp_send_json_error(__('Invalid contact list.', 'emaily'));
+	}
+
+	if (empty($email) || !is_email($email)) {
+		wp_send_json_error(__('Invalid email address.', 'emaily'));
+	}
+
+	$email_list = get_post_meta($post_id, 'email_contact_list_users', true);
+	$email_list = is_array($email_list) ? $email_list : [];
+
+	$original_count = count($email_list);
+	if ($original_count === 0) {
+		wp_send_json_error(__('This contact list has no emails to remove.', 'emaily'));
+	}
+
+	$updated_list = array_values(array_filter($email_list, function($stored_email) use ($email) {
+		return strtolower($stored_email) !== strtolower($email);
+	}));
+
+	if (count($updated_list) === $original_count) {
+		wp_send_json_error(__('The specified email was not found in this contact list.', 'emaily'));
+	}
+
+	update_post_meta($post_id, 'email_contact_list_users', $updated_list);
+	emaily_log($post_id, sprintf('Removed email manually: %s', $email));
+
+	wp_send_json_success([
+		'message' => sprintf(__('Email %s removed successfully.', 'emaily'), $email),
+		'count'   => count($updated_list),
+	]);
 }
 
 // Log function (consistent with emaily-email-sender.php)
