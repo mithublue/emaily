@@ -52,6 +52,30 @@ function emaily_add_email_list_metabox() {
 	);
 }
 
+add_action('add_meta_boxes', 'emaily_add_contact_list_message_metabox');
+function emaily_add_contact_list_message_metabox() {
+	add_meta_box(
+		'emaily_contact_list_message',
+		__('Subscription Message', 'emaily'),
+		'emaily_contact_list_message_metabox_callback',
+		'email_contact_list',
+		'side',
+		'default'
+	);
+}
+
+function emaily_contact_list_message_metabox_callback($post) {
+	wp_nonce_field('emaily_contact_list_message_nonce', 'emaily_contact_list_message_nonce');
+	$message = get_post_meta($post->ID, 'emaily_form_submission_message', true);
+	?>
+	<p>
+		<label for="emaily-contact-list-message"><?php esc_html_e('Custom submission confirmation message', 'emaily'); ?></label>
+	</p>
+	<textarea id="emaily-contact-list-message" name="emaily_form_submission_message" rows="4" style="width:100%;"><?php echo esc_textarea($message); ?></textarea>
+	<p class="description"><?php esc_html_e('Optional. Overrides the default form submission message for this contact list.', 'emaily'); ?></p>
+	<?php
+}
+
 function emaily_get_email_list_markup($post_id) {
 	$email_list = get_post_meta($post_id, 'email_contact_list_users', true);
 	$email_list = is_array($email_list) ? $email_list : [];
@@ -312,6 +336,26 @@ function emaily_remove_email_from_list() {
 		'message' => sprintf(__('Email %s removed successfully.', 'emaily'), $email),
 		'count'   => count($updated_list),
 	]);
+}
+
+add_action('save_post_email_contact_list', 'emaily_save_contact_list_meta');
+function emaily_save_contact_list_meta($post_id) {
+	if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) {
+		return;
+	}
+
+	if (!isset($_POST['emaily_contact_list_message_nonce']) || !wp_verify_nonce($_POST['emaily_contact_list_message_nonce'], 'emaily_contact_list_message_nonce')) {
+		return;
+	}
+
+	if (!current_user_can('edit_post', $post_id)) {
+		return;
+	}
+
+	if (isset($_POST['emaily_form_submission_message'])) {
+		$message = sanitize_textarea_field($_POST['emaily_form_submission_message']);
+		update_post_meta($post_id, 'emaily_form_submission_message', $message);
+	}
 }
 
 // Log function (consistent with emaily-email-sender.php)

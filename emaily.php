@@ -446,6 +446,21 @@ function emaily_validate_recaptcha($token) {
 	return isset($data['success']) && $data['success'] && (isset($data['score']) ? $data['score'] >= 0.5 : true);
 }
 
+function emaily_get_submission_message_for_lists($list_ids) {
+	if (!is_array($list_ids)) {
+		$list_ids = array($list_ids);
+	}
+
+	foreach ($list_ids as $list_id) {
+		$message = get_post_meta($list_id, 'emaily_form_submission_message', true);
+		if (!empty($message)) {
+			return $message;
+		}
+	}
+
+	return '';
+}
+
 // Handle AJAX form submission with email verification
 function emaily_handle_form_submission() {
 	check_ajax_referer('emaily_form_submit', 'nonce');
@@ -582,7 +597,13 @@ function emaily_handle_form_submission() {
 			wp_send_json_error(array('message' => __('Failed to send verification email. Please try again.', 'emaily')));
 		}
 
-		$submission_message = carbon_get_theme_option('emaily_form_submission_message') ?: __('Please check your email to verify your subscription.', 'emaily');
+		$submission_message = emaily_get_submission_message_for_lists(array_keys($lists_to_add));
+		if (!$submission_message) {
+			$submission_message = carbon_get_theme_option('emaily_form_submission_message');
+		}
+		if (!$submission_message) {
+			$submission_message = __('Please check your email to verify your subscription.', 'emaily');
+		}
 		wp_send_json_success(array('message' => $submission_message));
 	}
 
@@ -611,7 +632,10 @@ function emaily_handle_form_submission() {
 		emaily_send_slack_message('New Subscription', $slack_message);
 	}
 
-	$submission_message = carbon_get_theme_option('emaily_form_submission_message');
+	$submission_message = emaily_get_submission_message_for_lists(array_keys($lists_to_add));
+	if (!$submission_message) {
+		$submission_message = carbon_get_theme_option('emaily_form_submission_message');
+	}
 	if (!$submission_message) {
 		$submission_message = __('You have been subscribed successfully.', 'emaily');
 	}
