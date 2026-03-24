@@ -392,7 +392,6 @@ function emaily_import_users()
 		if (email_exists($email)) {
 			$skip_count++;
 			$skipped_emails[] = $email;
-			$user_emails[] = $email;
 			$user_id = get_user_by('email', $email)->ID;
 		} else {
 			$user_id = wp_insert_user(array(
@@ -431,7 +430,14 @@ function emaily_import_users()
 	}
 
 	if (!empty($user_emails)) {
-		update_post_meta($post_id, 'email_contact_list_users', $user_emails);
+		$skipped_emails = array_unique($skipped_emails);
+		$user_emails = array_unique($user_emails);
+
+		$existing_emails = get_post_meta($post_id, 'email_contact_list_users', true);
+		$existing_emails = is_array($existing_emails) ? $existing_emails : [];
+
+		$all_emails = array_values(array_unique(array_merge($existing_emails, $user_emails)));
+		update_post_meta($post_id, 'email_contact_list_users', $all_emails);
 	}
 
 	$message = array();
@@ -439,7 +445,8 @@ function emaily_import_users()
 		$message[] = sprintf(__('Successfully added %d users.', 'emaily'), $success_count);
 	}
 	if ($skip_count > 0) {
-		$message[] = sprintf(__('Skipped %d existing users: %s', 'emaily'), $skip_count, implode(', ', $skipped_emails));
+		$unique_skipped = array_unique($skipped_emails);
+		$message[] = sprintf(__('Skipped %d existing users: %s', 'emaily'), count($unique_skipped), implode(', ', $unique_skipped));
 	}
 	if (!empty($error_messages)) {
 		$message = array_merge($message, $error_messages);
