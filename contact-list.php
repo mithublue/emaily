@@ -383,16 +383,11 @@ function emaily_remove_email_from_list()
 add_action('wp_ajax_emaily_bulk_remove_emails', 'emaily_bulk_remove_emails');
 function emaily_bulk_remove_emails()
 {
-	$post_id = isset($_POST['post_id']) ? intval($_POST['post_id']) : 0;
-	emaily_log($post_id, 'emaily_bulk_remove_emails called');
 	check_ajax_referer('emaily_validate_emails_nonce', 'nonce');
-	emaily_log($post_id, 'Nonce check passed');
 
+	$post_id = isset($_POST['post_id']) ? intval($_POST['post_id']) : 0;
 	$emails = isset($_POST['emails']) ? (array) $_POST['emails'] : [];
 	$action = isset($_POST['bulk_action']) ? sanitize_text_field($_POST['bulk_action']) : '';
-
-	emaily_log($post_id, 'Action: ' . $action);
-	emaily_log($post_id, 'Emails: ' . print_r($emails, true));
 
 	if (!$post_id || get_post_type($post_id) !== 'email_contact_list') {
 		wp_send_json_error(__('Invalid contact list.', 'emaily'));

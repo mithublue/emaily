@@ -28,7 +28,8 @@ require_once __DIR__ . '/helper.php';
 require_once __DIR__ . '/contact-list.php';
 
 // Add the Emaily admin menu
-function emaily_admin_menu() {
+function emaily_admin_menu()
+{
 	add_menu_page(
 		__('Emaily', 'emaily'),
 		__('Emaily', 'emaily'),
@@ -65,7 +66,8 @@ function emaily_admin_menu() {
 add_action('admin_menu', 'emaily_admin_menu');
 
 // Render the Emaily admin page
-function emaily_admin_page() {
+function emaily_admin_page()
+{
 	if (isset($_POST['emaily_create_list']) && check_admin_referer('emaily_create_list_action', 'emaily_nonce')) {
 		wp_safe_redirect(admin_url('post-new.php?post_type=email_contact_list'));
 		exit;
@@ -85,7 +87,8 @@ function emaily_admin_page() {
 }
 
 // Add metabox to email_contact_list edit page
-function emaily_add_metabox() {
+function emaily_add_metabox()
+{
 	add_meta_box(
 		'emaily_user_import',
 		__('Import Users', 'emaily'),
@@ -106,7 +109,8 @@ function emaily_add_metabox() {
 add_action('add_meta_boxes', 'emaily_add_metabox');
 
 // Render the contact list import metabox
-function emaily_user_import_metabox($post) {
+function emaily_user_import_metabox($post)
+{
 	wp_nonce_field('emaily_user_import_nonce', 'emaily_user_import_nonce');
 	?>
 	<div id="emaily-import-metabox">
@@ -118,95 +122,105 @@ function emaily_user_import_metabox($post) {
 		<div id="emaily-import-messages"></div>
 	</div>
 	<style>
-        #emaily-import-metabox {
-            padding: 10px;
-        }
-        #emaily_user_file {
-            margin: 10px 0;
-        }
-        #emaily_add_users {
-            margin: 10px 0;
-        }
-        #emaily-import-messages {
-            margin-top: 10px;
-            padding: 10px;
-            border: 1px solid #ddd;
-            display: none;
-        }
-        #emaily-import-messages.success {
-            border-color: #46b450;
-            background: #f0fff0;
-        }
-        #emaily-import-messages.error {
-            border-color: #dc3232;
-            background: #fff4f4;
-        }
+		#emaily-import-metabox {
+			padding: 10px;
+		}
+
+		#emaily_user_file {
+			margin: 10px 0;
+		}
+
+		#emaily_add_users {
+			margin: 10px 0;
+		}
+
+		#emaily-import-messages {
+			margin-top: 10px;
+			padding: 10px;
+			border: 1px solid #ddd;
+			display: none;
+		}
+
+		#emaily-import-messages.success {
+			border-color: #46b450;
+			background: #f0fff0;
+		}
+
+		#emaily-import-messages.error {
+			border-color: #dc3232;
+			background: #fff4f4;
+		}
 	</style>
 	<?php
 }
 
 // Render the campaign opens metabox
-function emaily_campaign_opens_metabox($post) {
+function emaily_campaign_opens_metabox($post)
+{
 	$opened_emails = get_post_meta($post->ID, 'emaily_campaign_opened_emails', true);
 	$opened_emails = is_array($opened_emails) ? $opened_emails : array();
 	?>
 	<div id="emaily-campaign-opens-metabox">
 		<p><?php esc_html_e('Details of email open events for this campaign.', 'emaily'); ?></p>
-		<?php if (empty($opened_emails)) : ?>
+		<?php if (empty($opened_emails)): ?>
 			<p><?php esc_html_e('No email opens recorded yet.', 'emaily'); ?></p>
-		<?php else : ?>
+		<?php else: ?>
 			<table class="wp-list-table widefat fixed striped">
 				<thead>
-				<tr>
-					<th><?php esc_html_e('Email', 'emaily'); ?></th>
-					<th><?php esc_html_e('Open Count', 'emaily'); ?></th>
-					<th><?php esc_html_e('Open Timestamps', 'emaily'); ?></th>
-				</tr>
+					<tr>
+						<th><?php esc_html_e('Email', 'emaily'); ?></th>
+						<th><?php esc_html_e('Open Count', 'emaily'); ?></th>
+						<th><?php esc_html_e('Open Timestamps', 'emaily'); ?></th>
+					</tr>
 				</thead>
 				<tbody>
-				<?php foreach ($opened_emails as $email => $data) : ?>
-					<tr>
-						<td><?php
+					<?php foreach ($opened_emails as $email => $data): ?>
+						<tr>
+							<td><?php
 							$user = get_user_by('email', $email);
 							if (!is_wp_error($user)) {
 								echo esc_html($user->display_name);
 								echo ' | ' . esc_html('(' . $email . ')');
 							}
 							?></td>
-						<td><?php echo esc_html($data['count']); ?></td>
-						<td>
-							<?php
-							if (is_array($data['timestamps'])) {
-								echo esc_html(implode(', ', array_map(function($ts) {
-									return date_i18n('Y-m-d g:i A', strtotime($ts));
-								}, $data['timestamps'])));
-							} else {
-								echo esc_html(date_i18n('Y-m-d g:i A', strtotime($data['timestamps'])));
-							}
-							?>
-						</td>
-					</tr>
-				<?php endforeach; ?>
+							<td><?php echo esc_html($data['count']); ?></td>
+							<td>
+								<?php
+								if (is_array($data['timestamps'])) {
+									echo esc_html(implode(', ', array_map(function ($ts) {
+										return date_i18n('Y-m-d g:i A', strtotime($ts));
+									}, $data['timestamps'])));
+								} else {
+									echo esc_html(date_i18n('Y-m-d g:i A', strtotime($data['timestamps'])));
+								}
+								?>
+							</td>
+						</tr>
+					<?php endforeach; ?>
 				</tbody>
 			</table>
 		<?php endif; ?>
 	</div>
 	<style>
-        #emaily-campaign-opens-metabox {
-            padding: 10px;
-        }
-        #emaily-campaign-opens-metabox table {
-            width: 100%;
-        }
-        #emaily-campaign-opens-metabox th, #emaily-campaign-opens-metabox td {
-            padding: 10px;
-        }
+		#emaily-campaign-opens-metabox {
+			padding: 10px;
+		}
+
+		#emaily-campaign-opens-metabox table {
+			width: 100%;
+		}
+
+		#emaily-campaign-opens-metabox th,
+		#emaily-campaign-opens-metabox td {
+			padding: 10px;
+		}
 	</style>
 	<?php
 }
 
 // Enqueue admin scripts and styles
-function emaily_admin_enqueue($hook) {
+function emaily_admin_enqueue($hook)
+{
 	global $post_type;
 	if (($hook === 'post.php' || $hook === 'post-new.php') && $post_type === 'email_contact_list') {
 		wp_enqueue_script(
@@ -221,7 +235,7 @@ function emaily_admin_enqueue($hook) {
 			'emailyAjax',
 			array(
 				'ajax_url' => admin_url('admin-ajax.php'),
-				'nonce'    => wp_create_nonce('emaily_import_users'),
+				'nonce' => wp_create_nonce('emaily_import_users'),
 			)
 		);
 	}
@@ -256,7 +270,8 @@ function emaily_admin_enqueue($hook) {
 add_action('admin_enqueue_scripts', 'emaily_admin_enqueue');
 
 // Enqueue frontend scripts
-function emaily_frontend_enqueue() {
+function emaily_frontend_enqueue()
+{
 	wp_enqueue_script(
 		'emaily-form-frontend-js',
 		plugin_dir_url(__FILE__) . 'assets/js/form-frontend.js',
@@ -271,7 +286,7 @@ function emaily_frontend_enqueue() {
 		'emailyAjax',
 		array(
 			'ajax_url' => admin_url('admin-ajax.php'),
-			'nonce'    => wp_create_nonce('emaily_form_submit'),
+			'nonce' => wp_create_nonce('emaily_form_submit'),
 			'recaptcha_site_key' => $recaptcha_site_key,
 		)
 	);
@@ -279,7 +294,8 @@ function emaily_frontend_enqueue() {
 add_action('wp_enqueue_scripts', 'emaily_frontend_enqueue');
 
 // Handle AJAX user import
-function emaily_import_users() {
+function emaily_import_users()
+{
 	check_ajax_referer('emaily_import_users', 'nonce');
 
 	if (!current_user_can('manage_options')) {
@@ -305,9 +321,24 @@ function emaily_import_users() {
 
 	$required_fields = array('Email', 'Name');
 	$all_fields = array(
-		'Email', 'Name', 'Lastname', 'Middlename', 'Phone', 'Date of birth',
-		'Company name', 'Industry', 'Department', 'Job title', 'State',
-		'Postal code', 'Lead source', 'Salary', 'Country', 'City', '.', 'Tags'
+		'Email',
+		'Name',
+		'Lastname',
+		'Middlename',
+		'Phone',
+		'Date of birth',
+		'Company name',
+		'Industry',
+		'Department',
+		'Job title',
+		'State',
+		'Postal code',
+		'Lead source',
+		'Salary',
+		'Country',
+		'City',
+		'.',
+		'Tags'
 	);
 
 	$data = array();
@@ -346,6 +377,7 @@ function emaily_import_users() {
 	$user_emails = array();
 	$success_count = 0;
 	$skip_count = 0;
+	$skipped_emails = array();
 	$error_messages = array();
 
 	foreach ($data as $row) {
@@ -359,15 +391,16 @@ function emaily_import_users() {
 
 		if (email_exists($email)) {
 			$skip_count++;
+			$skipped_emails[] = $email;
 			$user_emails[] = $email;
 			$user_id = get_user_by('email', $email)->ID;
 		} else {
 			$user_id = wp_insert_user(array(
-				'user_login'   => sanitize_user($username = sanitize_user(explode('@', $email)[0]), true),
-				'user_email'   => $email,
+				'user_login' => sanitize_user($username = sanitize_user(explode('@', $email)[0]), true),
+				'user_email' => $email,
 				'display_name' => $name,
-				'role'         => 'subscriber',
-				'user_pass'    => wp_generate_password(),
+				'role' => 'subscriber',
+				'user_pass' => wp_generate_password(),
 			));
 
 			if (is_wp_error($user_id)) {
@@ -406,7 +439,7 @@ function emaily_import_users() {
 		$message[] = sprintf(__('Successfully added %d users.', 'emaily'), $success_count);
 	}
 	if ($skip_count > 0) {
-		$message[] = sprintf(__('Skipped %d existing users.', 'emaily'), $skip_count);
+		$message[] = sprintf(__('Skipped %d existing users: %s', 'emaily'), $skip_count, implode(', ', $skipped_emails));
 	}
 	if (!empty($error_messages)) {
 		$message = array_merge($message, $error_messages);
@@ -421,7 +454,8 @@ function emaily_import_users() {
 add_action('wp_ajax_emaily_import_users', 'emaily_import_users');
 
 // Validate reCAPTCHA token
-function emaily_validate_recaptcha($token) {
+function emaily_validate_recaptcha($token)
+{
 	$secret_key = carbon_get_theme_option('emaily_recaptcha_secret_key');
 	if (empty($secret_key)) {
 		return false; // reCAPTCHA not configured
@@ -429,7 +463,7 @@ function emaily_validate_recaptcha($token) {
 
 	$response = wp_remote_post('https://www.google.com/recaptcha/api/siteverify', array(
 		'body' => array(
-			'secret'   => $secret_key,
+			'secret' => $secret_key,
 			'response' => $token,
 			'remoteip' => $_SERVER['REMOTE_ADDR'],
 		),
@@ -446,7 +480,8 @@ function emaily_validate_recaptcha($token) {
 	return isset($data['success']) && $data['success'] && (isset($data['score']) ? $data['score'] >= 0.5 : true);
 }
 
-function emaily_get_submission_message_for_lists($list_ids) {
+function emaily_get_submission_message_for_lists($list_ids)
+{
 	if (!is_array($list_ids)) {
 		$list_ids = array($list_ids);
 	}
@@ -462,7 +497,8 @@ function emaily_get_submission_message_for_lists($list_ids) {
 }
 
 // Handle AJAX form submission with email verification
-function emaily_handle_form_submission() {
+function emaily_handle_form_submission()
+{
 	check_ajax_referer('emaily_form_submit', 'nonce');
 
 	// Check honeypot if enabled
@@ -517,11 +553,11 @@ function emaily_handle_form_submission() {
 
 	if (!$existing_user_id) {
 		$user_id = wp_insert_user(array(
-			'user_login'   => sanitize_user($username = sanitize_user(explode('@', $email)[0]), true),
-			'user_email'   => $email,
+			'user_login' => sanitize_user($username = sanitize_user(explode('@', $email)[0]), true),
+			'user_email' => $email,
 			'display_name' => $name ?: $email,
-			'role'         => 'subscriber',
-			'user_pass'    => wp_generate_password(),
+			'role' => 'subscriber',
+			'user_pass' => wp_generate_password(),
 		));
 
 		if (is_wp_error($user_id)) {
@@ -571,8 +607,8 @@ function emaily_handle_form_submission() {
 		$verification_link = add_query_arg(
 			array(
 				'emaily_verify' => '1',
-				'user_id'       => $user_id,
-				'token'         => $token,
+				'user_id' => $user_id,
+				'token' => $token,
 			),
 			home_url('/')
 		);
@@ -646,7 +682,8 @@ add_action('wp_ajax_emaily_form_submit', 'emaily_handle_form_submission');
 add_action('wp_ajax_nopriv_emaily_form_submit', 'emaily_handle_form_submission');
 
 // Handle email verification
-function emaily_handle_verification() {
+function emaily_handle_verification()
+{
 	if (!isset($_GET['emaily_verify']) || $_GET['emaily_verify'] !== '1') {
 		return;
 	}
@@ -729,7 +766,8 @@ function emaily_handle_verification() {
 add_action('init', 'emaily_handle_verification');
 
 // Schedule cron job to clean up unverified users
-function emaily_schedule_cleanup() {
+function emaily_schedule_cleanup()
+{
 	if (!wp_next_scheduled('emaily_cleanup_unverified_users')) {
 		wp_schedule_event(time(), 'hourly', 'emaily_cleanup_unverified_users');
 	}
@@ -737,10 +775,11 @@ function emaily_schedule_cleanup() {
 add_action('wp', 'emaily_schedule_cleanup');
 
 // Cleanup unverified users
-function emaily_cleanup_unverified_users() {
+function emaily_cleanup_unverified_users()
+{
 	$users = get_users(array(
-		'meta_key'     => 'emaily_verification_status',
-		'meta_value'   => 'pending',
+		'meta_key' => 'emaily_verification_status',
+		'meta_value' => 'pending',
 		'meta_compare' => '=',
 	));
 
@@ -755,7 +794,8 @@ function emaily_cleanup_unverified_users() {
 add_action('emaily_cleanup_unverified_users', 'emaily_cleanup_unverified_users');
 
 // Schedule cron job for daily campaign summary
-function emaily_schedule_daily_summary() {
+function emaily_schedule_daily_summary()
+{
 	if (!wp_next_scheduled('emaily_daily_campaign_summary')) {
 		wp_schedule_event(time(), 'twicedaily', 'emaily_daily_campaign_summary');
 	}
@@ -763,19 +803,20 @@ function emaily_schedule_daily_summary() {
 add_action('wp', 'emaily_schedule_daily_summary');
 
 // Handle daily campaign summary
-function emaily_daily_campaign_summary() {
+function emaily_daily_campaign_summary()
+{
 	if (!carbon_get_theme_option('emaily_slack_notify_daily_summary')) {
 		return;
 	}
 
 	$args = array(
-		'post_type'      => 'emaily_campaign',
-		'post_status'    => 'publish',
+		'post_type' => 'emaily_campaign',
+		'post_status' => 'publish',
 		'posts_per_page' => 1,
-		'meta_key'       => 'emaily_campaign_status',
-		'meta_value'     => 'completed',
-		'orderby'        => 'modified',
-		'order'          => 'DESC',
+		'meta_key' => 'emaily_campaign_status',
+		'meta_value' => 'completed',
+		'orderby' => 'modified',
+		'order' => 'DESC',
 	);
 
 	$query = new WP_Query($args);
@@ -805,13 +846,15 @@ function emaily_daily_campaign_summary() {
 add_action('emaily_daily_campaign_summary', 'emaily_daily_campaign_summary');
 
 // Add Audience Count column to email_contact_list
-function emaily_contact_list_columns($columns) {
+function emaily_contact_list_columns($columns)
+{
 	$columns['audience_count'] = __('Audience Count', 'emaily');
 	return $columns;
 }
 add_filter('manage_email_contact_list_posts_columns', 'emaily_contact_list_columns');
 
-function emaily_contact_list_column_data($column, $post_id) {
+function emaily_contact_list_column_data($column, $post_id)
+{
 	if ($column === 'audience_count') {
 		$users = get_post_meta($post_id, 'email_contact_list_users', true);
 		$count = is_array($users) ? count($users) : 0;
@@ -821,7 +864,8 @@ function emaily_contact_list_column_data($column, $post_id) {
 add_action('manage_email_contact_list_posts_custom_column', 'emaily_contact_list_column_data', 10, 2);
 
 // Add Campaign Status and Open Rate columns to emaily_campaign
-function emaily_campaign_columns($columns) {
+function emaily_campaign_columns($columns)
+{
 	$columns['campaign_status'] = __('Campaign Status', 'emaily');
 	$columns['open_rate'] = __('Open Rate', 'emaily');
 	$columns['unique_opens'] = __('Unique Opens', 'emaily');
@@ -830,7 +874,8 @@ function emaily_campaign_columns($columns) {
 }
 add_filter('manage_emaily_campaign_posts_columns', 'emaily_campaign_columns');
 
-function emaily_campaign_column_data($column, $post_id) {
+function emaily_campaign_column_data($column, $post_id)
+{
 	if ($column === 'campaign_status') {
 		$status = get_post_status($post_id);
 		echo esc_html($status === 'publish' ? 'Sent' : 'Draft');
@@ -860,7 +905,8 @@ function emaily_campaign_column_data($column, $post_id) {
 add_action('manage_emaily_campaign_posts_custom_column', 'emaily_campaign_column_data', 10, 2);
 
 // Handle email tracking endpoint
-function emaily_handle_tracking() {
+function emaily_handle_tracking()
+{
 	if (!isset($_GET['emaily_track']) || $_GET['emaily_track'] !== 'open') {
 		return;
 	}
@@ -942,13 +988,15 @@ function emaily_handle_tracking() {
 add_action('init', 'emaily_handle_tracking');
 
 // Load plugin text domain for translations
-function emaily_load_textdomain() {
+function emaily_load_textdomain()
+{
 	load_plugin_textdomain('emaily', false, dirname(plugin_basename(__FILE__)) . '/languages');
 }
 add_action('plugins_loaded', 'emaily_load_textdomain');
 
 // Deactivate cron on plugin deactivation
-function emaily_deactivate() {
+function emaily_deactivate()
+{
 	// Clear unverified users cleanup cron
 	$timestamp = wp_next_scheduled('emaily_cleanup_unverified_users');
 	if ($timestamp) {
@@ -963,9 +1011,9 @@ function emaily_deactivate() {
 
 	// Clear all emaily_send_campaign_{$post_id} events
 	$args = array(
-		'post_type'      => 'emaily_campaign',
+		'post_type' => 'emaily_campaign',
 		'posts_per_page' => -1,
-		'post_status'    => 'any',
+		'post_status' => 'any',
 	);
 	$campaigns = get_posts($args);
 	foreach ($campaigns as $campaign) {

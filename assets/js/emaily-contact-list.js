@@ -124,7 +124,6 @@ jQuery(document).ready(function ($) {
     $(document).on('click', '#emaily-bulk-action-submit', function (e) {
         e.preventDefault();
         var action = $('#emaily-bulk-action-selector').val();
-        console.log('Bulk action selected:', action);
         if (action === '-1') {
             alert('Please select a bulk action.');
             return;
@@ -134,7 +133,6 @@ jQuery(document).ready(function ($) {
         $('#emaily-email-table tbody .check-column input[type="checkbox"]:checked').each(function () {
             selectedEmails.push($(this).val());
         });
-        console.log('Selected emails:', selectedEmails);
 
         if (selectedEmails.length === 0) {
             alert('Please select at least one email.');
@@ -163,7 +161,7 @@ jQuery(document).ready(function ($) {
                 bulk_action: action
             },
             beforeSend: function () {
-                console.log('Sending AJAX request for bulk action...');
+
             }
         }).done(function (response) {
             if (response.success) {
